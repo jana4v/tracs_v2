@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TM Interface Documentation</title>
+</head>
+<body>
+    <h1>TM Interface Documentation</h1>
+    <h2>Endpoints</h2>
+    <ul>
+        <li><a href="#inject_dtm">POST /inject_dtm</a></li>
+        <li><a href="#get_tm">POST /get_tm</a></li>
+    </ul>
+
+    <h3 id="inject_dtm">POST /inject_dtm</h3>
+    <p>Injects telemetry data into Redis.</p>
+    <h4>Request</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "TM_MNEMONIC": 22
+        }
+        OR
+        {
+            "TM_MNEMONIC": {
+                "param_id": "PW1234",
+                "param": "mnemonic",
+                "source_info": "dtm",
+                "raw_count": 10,
+                "proc_value": "value",
+                "time_stamp": "00:22:12",
+                "upper_limit": 1,
+                "lower_limit": 0,
+                "err_desc": ""
+            }
+        }
+    </pre>
+    <h4>Response</h4>
+    <pre>
+        Headers:
+            Content-Type: text/plain
+        Body:
+            OK
+    </pre>
+    <h4>Example Request</h4>
+    <pre>
+        curl -X POST \
+        http://localhost:8080/inject_dtm \
+        -H 'Content-Type: application/json' \
+        -d '{
+              "TM_MNEMONIC": 22
+            }'
+    </pre>
+    <h4>Example Response</h4>
+    <pre>
+        OK
+    </pre>
+
+    <h3 id="get_tm">POST /get_tm</h3>
+    <p>Fetches telemetry data from Redis based on mnemonics and source.</p>
+    <h4>Request</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "mnemonics": ["key1", "key2"],
+            "source": "TM1"
+        }
+    </pre>
+    <h4>Response</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "results": {
+                "key1": 123.45,
+                "key2": "some_string"
+            }
+        }
+    </pre>
+    <h4>Example Request</h4>
+    <pre>
+        curl -X POST \
+        http://localhost:8080/get_tm \
+        -H 'Content-Type: application/json' \
+        -d '{
+              "mnemonics": ["key1", "key2"],
+              "source": "TM1"
+            }'
+    </pre>
+    <h4>Example Response</h4>
+    <pre>
+        {
+            "results": {
+                "key1": 123.45,
+                "key2": "some_string"
+            }
+        }
+    </pre>
+
+    <h3>Error Responses</h3>
+    <pre>
+        Status Code: 400 Bad Request
+        Body:
+        {
+            "error": "Invalid request payload"
+        }
+
+        Status Code: 500 Internal Server Error
+        Body:
+        {
+            "error": "Failed to process request"
+        }
+    </pre>
+</body>
+</html>

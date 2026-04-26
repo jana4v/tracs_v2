@@ -1,0 +1,27 @@
+{
+  "name": "nuxt3-primevue-starter",
+  "type": "module",
+  "version": "2.2.6",
+  "license": "MIT",
+  "scripts": {
+    "build": "nuxi build",
+    "dev": "SET NODE_OPTIONS=--loader=tsx/esm && nuxi dev --host",
+    "dev:windows": "cross-env NODE_OPTIONS=\"--experimental-loader ./loader.mjs\" nuxi dev --host",
+    "dev:safe": "node --experimental-loader ./loader.mjs ./node_modules/nuxi/bin/nuxi.mjs dev --host",
+    "info": "nuxi info",
+    "generate": "nuxi generate",
+    "preview": "nuxi preview",
+    "module": "nuxi init -t module my-module",
+    "start": "node .output/server/index.mjs",
+    "lint": "eslint ./app",
+    "lint:fix": "eslint --fix ./app",
+    "test:ui": "vitest --ui",
+    "test:unit": "vitest --run --reporter verbose",
+    "test:coverage": "vitest run --coverage",
+    "postinstall": "nuxt prepare",
+    "release": "pnpm run lint && pnpm run build && changelogen --patch --release && git push --follow-tags",
+    "analyze": "nuxi analyze",
+    "clean": "nuxi cleanup && rm -rf node_modules/.cache",
+    "typecheck": "nuxi typecheck"
+  }
+}

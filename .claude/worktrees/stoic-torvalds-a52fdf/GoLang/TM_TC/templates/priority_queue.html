@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Priority Queue Interface Documentation</title>
+</head>
+<body>
+    <h1>Priority Queue Interface Documentation</h1>
+    <h2>Endpoints</h2>
+    <ul>
+        <li><a href="#enqueue">POST /enqueue/{queueName}</a></li>
+        <li><a href="#dequeue">GET /dequeue/{queueName}</a></li>
+        <li><a href="#clear">POST /clear/{queueName}</a></li>
+    </ul>
+
+    <h3 id="enqueue">POST /enqueue/{queueName}</h3>
+    <p>Adds an item to the specified priority queue.</p>
+    <h4>Request</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "priority": 1,
+            "value": "exampleValue"
+        }
+    </pre>
+    <h4>Response</h4>
+    <pre>
+        Headers:
+            Content-Type: text/plain
+        Body:
+            Created
+    </pre>
+    <h4>Example Request</h4>
+    <pre>
+        curl -X POST \
+        http://localhost:8080/enqueue/exampleQueue \
+        -H 'Content-Type: application/json' \
+        -d '{
+              "priority": 1,
+              "value": "exampleValue"
+            }'
+    </pre>
+    <h4>Example Response</h4>
+    <pre>
+        Created
+    </pre>
+
+    <h3 id="dequeue">GET /dequeue/{queueName}</h3>
+    <p>Removes and returns the item with the highest priority from the specified queue.</p>
+    <h4>Request</h4>
+    <pre>
+        No request body required.
+    </pre>
+    <h4>Response</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "priority": 1,
+            "value": "exampleValue"
+        }
+    </pre>
+    <h4>Example Request</h4>
+    <pre>
+        curl -X GET \
+        http://localhost:8080/dequeue/exampleQueue
+    </pre>
+    <h4>Example Response</h4>
+    <pre>
+        {
+            "priority": 1,
+            "value": "exampleValue"
+        }
+    </pre>
+
+    <h3 id="clear">POST /clear/{queueName}</h3>
+    <p>Clears all items from the specified queue.</p>
+    <h4>Request</h4>
+    <pre>
+        No request body required.
+    </pre>
+    <h4>Response</h4>
+    <pre>
+        Headers:
+            Content-Type: text/plain
+        Body:
+            OK
+    </pre>
+    <h4>Example Request</h4>
+    <pre>
+        curl -X POST \
+        http://localhost:8080/clear/exampleQueue
+    </pre>
+    <h4>Example Response</h4>
+    <pre>
+        OK
+    </pre>
+
+    <h3>Error Responses</h3>
+    <pre>
+        Status Code: 400 Bad Request
+        Body:
+        {
+            "error": "Invalid request payload"
+        }
+
+        Status Code: 404 Not Found
+        Body:
+        {
+            "error": "Queue is empty or does not exist"
+        }
+    </pre>
+</body>
+</html>

@@ -1,0 +1,18 @@
+# Instrument API Configuration
+# Edit this file to switch between local and remote instrument control.
+# No code changes needed — the app reads this on startup.
+
+[remote]
+# Set to true  → all instrument commands route through the bridge PC (remote mode)
+# Set to false → commands run locally via GPIB/VISA (local mode)
+enabled = true
+
+# URL of the bridge PC running remote_server.py
+#bridge_url = "http://100.91.6.81:5000"
+bridge_url = "http://100.69.237.114:5000"
+
+# HTTP request timeout in seconds
+timeout = 30
+
+# Number of retry attempts on connection failure
+retry_attempts = 3

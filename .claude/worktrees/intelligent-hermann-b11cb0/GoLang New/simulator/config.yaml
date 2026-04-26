@@ -1,0 +1,15 @@
+service:
+  name: "tm-simulator"
+  log_level: "info"
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+sqlite:
+  path: "./astra.db"
+  in_memory: false
+
+http:
+  port: 21001

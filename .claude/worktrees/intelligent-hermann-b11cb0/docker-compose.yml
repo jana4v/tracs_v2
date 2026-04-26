@@ -1,0 +1,27 @@
+version: '3.8'
+services:
+  mongodb:
+    image: mongo:7
+    container_name: astra-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - astra-mongo-data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    environment:
+      MONGO_INITDB_DATABASE: astra
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: astra-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - astra-redis-data:/data
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+
+volumes:
+  astra-mongo-data:
+  astra-redis-data:

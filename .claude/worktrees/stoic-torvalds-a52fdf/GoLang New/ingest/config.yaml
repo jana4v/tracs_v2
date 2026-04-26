@@ -1,0 +1,58 @@
+service:
+  name: "tm-ingest"
+  log_level: "info"
+
+# Port for the sim HTTP API (value injection + random sim control).
+# The gateway proxies /api/go/v1/sim/streams/* to this port.
+sim_port: 21004
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+websocket:
+  retry_initial: "1s"
+  retry_max: "30s"
+  retry_multiplier: 2
+
+nats:
+  url: "nats://localhost:4222"
+  name: "tm-ingest"
+  subject_prefix: "tm"
+  poll_interval_ms: 800
+  snapshot_interval_s: 30
+
+chains:
+  - name: TM1
+    type: TM
+    host: "172.20.26.1"
+    port: 9050
+  - name: TM2
+    type: TM
+    host: "172.20.26.1"
+    port: 9051
+  - name: TM3
+    type: TM
+    host: "172.20.26.1"
+    port: 9052
+  - name: TM4
+    type: TM
+    host: "172.20.26.1"
+    port: 9053
+  - name: SMON1
+    type: SCOS
+    host: "172.20.26.1"
+    port: 9060
+  - name: SMON2
+    type: SCOS
+    host: "172.20.26.1"
+    port: 9061
+  - name: ADC1
+    type: SCOS
+    host: "172.20.26.1"
+    port: 9011
+  - name: ADC2
+    type: SCOS
+    host: "172.20.26.1"
+    port: 9063

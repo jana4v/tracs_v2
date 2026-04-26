@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Publish to WAMP Endpoint Documentation</title>
+</head>
+<body>
+    <h1>Publish to WAMP Endpoint Documentation</h1>
+    <h2>POST /publish_to_wamp</h2>
+    <p>Publishes a message to the specified WAMP topic.</p>
+    <h3>Request</h3>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body (for WampMessage):
+        {
+            "topic": "example.topic",
+            "msg": {
+                "key1": "value1",
+                "key2": "value2"
+            }
+        }
+        Body (for WampMessage1):
+        {
+            "topic": "example.topic",
+            "msg": "string message"
+        }
+    </pre>
+    <h3>Response</h3>
+    <pre>
+        Headers:
+            Content-Type: text/plain
+        Body:
+            Message published successfully
+    </pre>
+    <h3>Example Request</h3>
+    <pre>
+        curl -X POST \
+        http://localhost:8080/publish_to_wamp \
+        -H 'Content-Type: application/json' \
+        -d '{
+              "topic": "example.topic",
+              "msg": {
+                "key1": "value1",
+                "key2": "value2"
+              }
+            }'
+    </pre>
+    <h3>Example Response</h3>
+    <pre>
+        Message published successfully
+    </pre>
+    <h3>Error Responses</h3>
+    <pre>
+        Status Code: 400 Bad Request
+        Body:
+        {
+            "error": "error message"
+        }
+        
+        Status Code: 500 Internal Server Error
+        Body:
+        {
+            "error": "Failed to publish message"
+        }
+    </pre>
+</body>
+</html>

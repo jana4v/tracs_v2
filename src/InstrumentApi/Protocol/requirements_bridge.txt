@@ -1,0 +1,21 @@
+# Requirements for Instrument Bridge Server
+# Install on the dual-LAN PC (bridge PC)
+
+# Web server framework
+flask>=2.3.0
+
+# VISA instrument communication
+pyvisa>=1.13.0
+pyvisa-py>=0.7.0
+
+# HTTP client for remote protocol (also needed on intranet PC)
+requests>=2.31.0
+
+# Data validation
+pydantic>=2.0.0
+
+# Optional: For authentication
+# flask-httpauth>=4.8.0
+
+# Optional: For HTTPS support
+# pyopenssl>=23.0.0

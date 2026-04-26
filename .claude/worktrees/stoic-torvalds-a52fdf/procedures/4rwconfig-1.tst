@@ -1,0 +1,12 @@
+TEST_NAME 4rw-config1
+PRE_TEST_REQ TM1.xyz_sts == "on" AND TM1.abc > 20
+SEND START_RW
+WAIT 5
+CHECK TM1.RW_STATUS == "READY"
+
+IF TM1.VOLT > 5
+    SEND START_RW
+ELSE
+    ALERT_MSG "Voltage too low"
+    ABORT_TEST
+END

@@ -1,0 +1,18 @@
+service:
+  name: tm-comparator
+  log_level: info
+
+redis:
+  addr: localhost:6379
+  password: ""
+  db: 0
+
+sqlite:
+  path: "./astra.db"
+  in_memory: false
+
+compare_pairs:
+  - chain1: TM1
+    chain2: TM2
+
+poll_interval_ms: 500

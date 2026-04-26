@@ -1,0 +1,30 @@
+# umacs-tc-emulator reference configuration
+# These values are shown here for documentation; use CLI flags to override.
+#
+# Run: ./umacs-tc-emulator [flags]
+# All settings below map 1-to-1 to the CLI flags documented in cmd/main.go.
+
+emulator:
+  # TCP address the emulator binds to.
+  # Use the configured UMACS TC target port so umacs-tc can point at localhost:21003.
+  host: "0.0.0.0"
+  port: 21003
+
+  # Execution simulation timing
+  queued_delay_ms: 500          # pause before queued → in-progress
+  in_progress_duration_ms: 4000 # pause before in-progress → success|failure
+
+  # Outcome tuning
+  success_rate: 100             # 100 = always success; 80 = 20 % failure rate
+
+  # Set to false to accept loadProcedure without prior validateProcedure
+  validate_required: true
+
+# Redis integration (optional).
+# When redis_addr is set, the emulator mirrors status transitions to
+# TC_FILES_STATUS so that umacs-tc's triggerFileWaitForExecutionComplete()
+# polling loop resolves without any code changes in umacs-tc.
+redis:
+  addr: ""          # e.g. "localhost:6379"
+  password: ""
+  db: 0

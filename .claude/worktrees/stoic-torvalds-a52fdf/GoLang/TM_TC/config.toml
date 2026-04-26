@@ -1,0 +1,7 @@
+umacs_data_server_ip = ""
+
+[paths]
+#main_dist = "./webApps/main"
+main_dist = "../../GUI/GUI/.output/public"
+spasdacs_dist = "../../deployment/lib/spasdacs/generated_webapp/dist"
+

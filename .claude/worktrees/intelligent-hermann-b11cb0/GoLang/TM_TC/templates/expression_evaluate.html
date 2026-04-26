@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expression Evaluate Endpoint Documentation</title>
+</head>
+<body>
+    <h1>Expression Evaluate Endpoint Documentation</h1>
+    <h2>POST /expression_evaluate</h2>
+    <p>Evaluates the provided logical expression with the given variables.</p>
+    <h3>Request</h3>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "expression": "a > b",
+            "variables": ["a", "b"],
+            "timeout": 30
+        }
+    </pre>
+    <h3>Response</h3>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "result": true,
+            "conditions": {
+                "a": {
+                    "condition": "a == 10",
+                    "status": true,
+                    "value": "10"
+                },
+                "b": {
+                    "condition": "b == 5",
+                    "status": true,
+                    "value": "5"
+                }
+            }
+        }
+    </pre>
+</body>
+</html>

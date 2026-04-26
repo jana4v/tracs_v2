@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UMACS TC Interface Documentation</title>
+</head>
+<body>
+    <h1>UMACS TC Interface Documentation</h1>
+    <h2>Endpoints</h2>
+    <ul>
+        <li><a href="#umacs_tc">POST /umacs_tc</a></li>
+        <li><a href="#umacs_tc_trigger_file_execution">POST /umacs_tc_trigger_file_execution</a></li>
+        <li><a href="#umacs_tc_trigger_file_execution_and_wait_for_completion">POST /umacs_tc_trigger_file_execution_and_wait_for_completion</a></li>
+        <li><a href="#umacs_tc_transfer_file_and_trigger_execution">POST /umacs_tc_transfer_file_and_trigger_execution</a></li>
+        <li><a href="#umacs_tc_transfer_file_trigger_execution_and_wait_for_completion">POST /umacs_tc_transfer_file_trigger_execution_and_wait_for_completion</a></li>
+    </ul>
+
+    <h3 id="umacs_tc">POST /umacs_tc</h3>
+    <p>Handles the TC request.</p>
+    <h4>Request</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "action": "loadprocedure",
+            "proc_name": "exampleProcName"
+        }
+    </pre>
+    <h4>Response</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "ack": true,
+            "exe_status": "success"
+        }
+    </pre>
+    <h4>Example Request</h4>
+    <pre>
+        curl -X POST \
+        http://localhost:8080/umacs_tc \
+        -H 'Content-Type: application/json' \
+        -d '{
+              "action": "loadprocedure",
+              "proc_name": "exampleProcName"
+            }'
+    </pre>
+    <h4>Example Response</h4>
+    <pre>
+        {
+            "ack": true,
+            "exe_status": "success"
+        }
+    </pre>
+
+    <h3 id="umacs_tc_trigger_file_execution">POST /umacs_tc_trigger_file_execution</h3>
+    <p>Triggers file execution.</p>
+    <h4>Request</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "filename": "exampleFileName"
+        }
+    </pre>
+    <h4>Response</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "ack": true,
+            "exe_status": "success"
+        }
+    </pre>
+    <h4>Example Request</h4>
+    <pre>
+        curl -X POST \
+        http://localhost:8080/umacs_tc_trigger_file_execution \
+        -H 'Content-Type: application/json' \
+        -d '{
+              "filename": "exampleFileName"
+            }'
+    </pre>
+    <h4>Example Response</h4>
+    <pre>
+        {
+            "ack": true,
+            "exe_status": "success"
+        }
+    </pre>
+
+    <h3 id="umacs_tc_trigger_file_execution_and_wait_for_completion">POST /umacs_tc_trigger_file_execution_and_wait_for_completion</h3>
+    <p>Triggers file execution and waits for completion.</p>
+    <h4>Request</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "filename": "exampleFileName"
+        }
+    </pre>
+    <h4>Response</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "ack": true,
+            "exe_status": "success"
+        }
+    </pre>
+    <h4>Example Request</h4>
+    <pre>
+        curl -X POST \
+        http://localhost:8080/umacs_tc_trigger_file_execution_and_wait_for_completion \
+        -H 'Content-Type: application/json' \
+        -d '{
+              "filename": "exampleFileName"
+            }'
+    </pre>
+    <h4>Example Response</h4>
+    <pre>
+        {
+            "ack": true,
+            "exe_status": "success"
+        }
+    </pre>
+
+    <h3 id="umacs_tc_transfer_file_and_trigger_execution">POST /umacs_tc_transfer_file_and_trigger_execution</h3>
+    <p>Transfers file via SFTP and triggers execution.</p>
+    <h4>Request</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "filename": "exampleFileName",
+            "text":"procedure string"
+        }
+    </pre>
+    <h4>Response</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "ack": true,
+            "exe_status": "success"
+        }
+    </pre>
+    <h4>Example Request</h4>
+    <pre>
+        curl -X POST \
+        http://localhost:8080/umacs_tc_transfer_file_and_trigger_execution \
+        -H 'Content-Type: application/json' \
+        -d '{
+              "filename": "exampleFileName",
+              "text":"procedure string"
+            }'
+    </pre>
+    <h4>Example Response</h4>
+    <pre>
+        {
+            "ack": true,
+            "exe_status": "success"
+        }
+    </pre>
+
+    <h3 id="umacs_tc_transfer_file_trigger_execution_and_wait_for_completion">POST /umacs_tc_transfer_file_trigger_execution_and_wait_for_completion</h3>
+    <p>Transfers file via SFTP, triggers execution, and waits for completion.</p>
+    <h4>Request</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "filename": "exampleFileName",
+            "text":"procedure string"
+        }
+    </pre>
+    <h4>Response</h4>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "ack": true,
+            "exe_status": "success"
+        }
+    </pre>
+    <h4>Example Request</h4>
+    <pre>
+        curl -X POST \
+        http://localhost:8080/umacs_tc_transfer_file_trigger_execution_and_wait_for_completion \
+        -H 'Content-Type: application/json' \
+        -d '{
+              "filename": "exampleFileName",
+              "text":"procedure string"
+            }'
+    </pre>
+    <h4>Example Response</h4>
+    <pre>
+        {
+            "ack": true,
+            "exe_status": "success"
+        }
+    </pre>
+
+    <h3>Error Responses</h3>
+    <pre>
+        Status Code: 400 Bad Request
+        Body:
+        {
+            "error": "Invalid request payload"
+        }
+
+        Status Code: 500 Internal Server Error
+        Body:
+        {
+            "error": "Failed to process request"
+        }
+    </pre>
+</body>
+</html>

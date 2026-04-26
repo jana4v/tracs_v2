@@ -1,0 +1,19 @@
+service:
+  name: "tm-gateway"
+  log_level: "info"
+
+# Base URL of the ingest service sim API.
+# All /api/go/v1/sim/streams/* requests are proxied to this address.
+ingest_sim_url: "http://localhost:21004"
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+sqlite:
+  path: "./astra.db"
+  in_memory: false
+
+http:
+  port: 21000

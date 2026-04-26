@@ -1,0 +1,22 @@
+service:
+  name: tm-chainmon
+  log_level: info
+
+redis:
+  addr: localhost:6379
+  password: ""
+  db: 0
+
+chains:
+  - name: TM1
+    type: TM
+    timeout_seconds: 1
+  - name: TM2
+    type: TM
+    timeout_seconds: 1
+  - name: SMON1
+    type: SMON
+    timeout_seconds: 5
+  - name: ADC1
+    type: ADC
+    timeout_seconds: 1

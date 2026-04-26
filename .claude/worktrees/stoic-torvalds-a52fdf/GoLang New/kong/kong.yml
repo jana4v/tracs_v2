@@ -1,0 +1,63 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: tm-gateway
+    url: http://host.docker.internal:21000
+    routes:
+      - name: tm-gateway-route
+        paths:
+          - /gateway
+        strip_path: true
+        preserve_host: false
+
+  - name: tm-simulator
+    url: http://host.docker.internal:21001
+    routes:
+      - name: tm-simulator-route
+        paths:
+          - /simulator
+        strip_path: true
+        preserve_host: false
+
+  - name: tm-umacs-tc
+    url: http://host.docker.internal:21002
+    routes:
+      - name: tm-umacs-tc-route
+        paths:
+          - /umacs-tc
+        strip_path: true
+        preserve_host: false
+
+  - name: tm-umacs-emulator
+    url: http://host.docker.internal:21003
+    routes:
+      - name: tm-umacs-emulator-route
+        paths:
+          - /umacs-emulator
+        strip_path: true
+        preserve_host: false
+
+  - name: tm-iam
+    url: http://host.docker.internal:21005
+    routes:
+      - name: tm-iam-route
+        paths:
+          - /iam
+        strip_path: false
+        preserve_host: false
+
+  # MQTT broker WebSocket (EMQX default WS port 8083, path /mqtt)
+  # Clients connect to: ws://localhost/mqtt
+  - name: mqtt-broker
+    url: http://host.docker.internal:8083
+    routes:
+      - name: mqtt-ws-route
+        paths:
+          - /mqtt
+          - /mqtt/
+        strip_path: false
+        preserve_host: false
+        protocols:
+          - http
+          - https

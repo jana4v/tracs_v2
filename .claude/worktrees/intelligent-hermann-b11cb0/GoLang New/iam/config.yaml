@@ -1,0 +1,19 @@
+service:
+  name: "iam"
+  log_level: "info"
+
+http:
+  port: 21005
+
+sqlite:
+  path: "./iam.db"
+  in_memory: false
+
+iam:
+  # Change jwt_secret to a strong random value in production.
+  # Minimum recommended: 32 random bytes, base64-encoded.
+  jwt_secret: "CHANGE_ME_use_a_strong_secret_in_production_min32chars"
+
+  # Default admin password seeded on first startup (when users collection is empty).
+  # Change immediately after first login via POST /iam/auth/change-password.
+  admin_password: "Admin@123!"

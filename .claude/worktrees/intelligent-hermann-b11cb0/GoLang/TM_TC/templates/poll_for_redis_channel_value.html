@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poll for Redis Channel Value Endpoint Documentation</title>
+</head>
+<body>
+    <h1>Poll for Redis Channel Value Endpoint Documentation</h1>
+    <h2>POST /poll_for_redis_channel_value</h2>
+    <p>Polls a Redis channel for a specific command value. If the command is received within a specified period, it responds with the command status. Otherwise, it times out.</p>
+    <h3>Request</h3>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "uuid": "unique-request-id",
+            "value": "exampleCommand",
+            "channel_name": "exampleChannel"
+        }
+    </pre>
+    <h3>Response</h3>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "status": true,
+            "uuid": "unique-request-id"
+        }
+    </pre>
+    <h3>Example Request</h3>
+    <pre>
+        curl -X POST \
+        http://localhost:8080/poll_for_redis_channel_value \
+        -H 'Content-Type: application/json' \
+        -d '{
+              "uuid": "unique-request-id",
+              "value": "exampleCommand",
+              "channel_name": "exampleChannel"
+            }'
+    </pre>
+    <h3>Example Response</h3>
+    <pre>
+        {
+            "status": true,
+            "uuid": "unique-request-id"
+        }
+    </pre>
+    <h3>Error Responses</h3>
+    <pre>
+        Status Code: 400 Bad Request
+        Body:
+        {
+            "error": "Invalid request payload"
+        }
+
+        Status Code: 400 Bad Request
+        Body:
+        {
+            "error": "Command, ChannelName, and UUID fields are required"
+        }
+        
+        Status Code: 408 Request Timeout
+        Body:
+        {
+            "error": "Timeout waiting for command"
+        }
+    </pre>
+</body>
+</html>

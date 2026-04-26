@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp \"src/InstrumentApi/TtcTransmitter/BHE.py\" \"src/InstrumentApi/TtcTransmitter/INS_BHE_C.py\")",
+      "Bash(cp \"src/InstrumentApi/TtcTransmitter/BHE_Ku.py\" \"src/InstrumentApi/TtcTransmitter/INS_BHE_Ku.py\")"
+    ]
+  }
+}

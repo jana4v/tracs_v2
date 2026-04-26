@@ -1,0 +1,3 @@
+{"time":"2026-04-05T22:38:13.7498393+05:30","level":"INFO","msg":"connected to Redis","service":"","addr":"localhost:6379"}
+{"time":"2026-04-05T22:38:13.7531001+05:30","level":"INFO","msg":"connected to SQLite","service":"","path":"./astra.db"}
+{"time":"2026-04-05T22:38:13.754456+05:30","level":"INFO","msg":"starting HTTP server","service":"","addr":":0"}

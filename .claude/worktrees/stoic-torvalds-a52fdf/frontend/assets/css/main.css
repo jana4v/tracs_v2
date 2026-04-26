@@ -1,0 +1,596 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+/* APEX Global Styles */
+
+:root {
+  --apex-bg: #0b0f19;
+  --apex-surface: #111827;
+  --apex-surface-2: #151f2e;
+  --apex-border: #263245;
+  --apex-text: #e2e8f0;
+  --apex-muted: #94a3b8;
+  --apex-accent: #22d3ee;
+  --apex-accent-2: #f59e0b;
+  --apex-success: #10b981;
+  --apex-warning: #f59e0b;
+  --apex-error: #f87171;
+
+  /* Alias for astra variables */
+  --astra-bg: var(--apex-bg);
+  --astra-surface: var(--apex-surface);
+  --astra-surface-2: var(--apex-surface-2);
+  --astra-border: var(--apex-border);
+  --astra-text: var(--apex-text);
+  --astra-muted: var(--apex-muted);
+  --astra-accent: var(--apex-accent);
+  --astra-success: var(--apex-success);
+  --astra-warning: var(--apex-warning);
+  --astra-error: var(--apex-error);
+}
+
+/* Light mode APEX variables */
+.light {
+  --apex-bg: #f8fafc;
+  --apex-surface: #ffffff;
+  --apex-surface-2: #f1f5f9;
+  --apex-border: #e2e8f0;
+  --apex-text: #1e293b;
+  --apex-muted: #64748b;
+  --apex-accent: #0891b2;
+  --apex-accent-2: #d97706;
+  --apex-success: #059669;
+  --apex-warning: #d97706;
+  --apex-error: #dc2626;
+
+  /* Alias for astra variables in light mode */
+  --astra-bg: var(--apex-bg);
+  --astra-surface: var(--apex-surface);
+  --astra-surface-2: var(--apex-surface-2);
+  --astra-border: var(--apex-border);
+  --astra-text: var(--apex-text);
+  --astra-muted: var(--apex-muted);
+  --astra-accent: var(--apex-accent);
+  --astra-success: var(--apex-success);
+  --astra-warning: var(--apex-warning);
+  --astra-error: var(--apex-error);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--apex-bg);
+  color: var(--apex-text);
+  font-family: 'Space Grotesk', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  height: 100%;
+  overflow: hidden;
+}
+
+code,
+pre,
+.font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+}
+
+#__nuxt {
+  height: 100%;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: 0.02em;
+}
+
+.app-shell {
+  position: relative;
+  height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(900px 600px at 10% -10%, rgba(34, 211, 238, 0.2), transparent 60%),
+    radial-gradient(800px 500px at 90% 10%, rgba(245, 158, 11, 0.14), transparent 55%),
+    linear-gradient(180deg, #0b0f19 0%, #0a1020 100%);
+}
+
+.light .app-shell {
+  background:
+    radial-gradient(900px 600px at 10% -10%, rgba(8, 145, 178, 0.15), transparent 60%),
+    radial-gradient(800px 500px at 90% 10%, rgba(217, 119, 6, 0.1), transparent 55%),
+    linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.app-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(148, 163, 184, 0.06) 0 1px, transparent 1px 140px),
+    repeating-linear-gradient(0deg, rgba(148, 163, 184, 0.06) 0 1px, transparent 1px 140px);
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-main > * {
+    animation: none;
+  }
+}
+
+.panel-card.p-card {
+  background: rgba(17, 24, 39, 0.88);
+  border: 1px solid rgba(38, 50, 69, 0.9);
+  border-radius: 18px;
+  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.45);
+  backdrop-filter: blur(10px);
+}
+
+.panel-card .p-card-body {
+  padding: 1.25rem;
+}
+
+.p-datatable .p-datatable-thead > tr > th {
+  background: rgba(12, 17, 32, 0.9);
+  color: var(--apex-muted);
+  border-color: var(--apex-border);
+  font-weight: 600;
+}
+
+.p-datatable .p-datatable-tbody > tr {
+  background: transparent;
+  color: var(--apex-text);
+}
+
+.p-datatable .p-datatable-tbody > tr.p-highlight {
+  background: rgba(34, 211, 238, 0.12);
+}
+
+
+.p-button {
+  border-radius: 999px;
+  letter-spacing: 0.01em;
+}
+
+.p-tag {
+  border-radius: 999px;
+}
+
+/* Monaco editor current-line highlighting for step execution */
+.current-line-decoration {
+  background: rgba(34, 211, 238, 0.12) !important;
+  border-left: 3px solid var(--apex-accent) !important;
+}
+
+.current-line-glyph {
+  background: var(--apex-accent);
+  border-radius: 50%;
+  margin-left: 3px;
+  width: 8px !important;
+  height: 8px !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(38, 50, 69, 0.8);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.8);
+}
+
+/* Dark mode overrides for PrimeVue */
+/* Panel card (standalone, without PrimeVue Card) */
+.panel-card {
+  background: rgba(17, 24, 39, 0.88);
+  border: 1px solid rgba(38, 50, 69, 0.9);
+  border-radius: 18px;
+  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.45);
+  backdrop-filter: blur(10px);
+}
+
+/* AG Grid ASTRA Dark Theme */
+.ag-theme-alpine-dark {
+  --ag-background-color: transparent;
+  --ag-header-background-color: rgba(12, 17, 32, 0.95);
+  --ag-odd-row-background-color: rgba(17, 24, 39, 0.25);
+  --ag-row-hover-color: rgba(34, 211, 238, 0.06);
+  --ag-selected-row-background-color: rgba(34, 211, 238, 0.1);
+  --ag-range-selection-background-color: rgba(34, 211, 238, 0.12);
+  --ag-border-color: var(--apex-border);
+  --ag-header-foreground-color: var(--apex-muted);
+  --ag-foreground-color: var(--apex-text);
+  --ag-secondary-foreground-color: var(--apex-muted);
+  --ag-row-border-color: rgba(38, 50, 69, 0.4);
+  --ag-font-size: 13px;
+  --ag-grid-size: 6px;
+}
+
+.ag-theme-alpine-dark .ag-root-wrapper {
+  border: none;
+}
+
+.ag-theme-alpine-dark .ag-header-cell {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.ag-theme-alpine-dark .ag-row {
+  border-bottom: 1px solid rgba(38, 50, 69, 0.35);
+}
+
+.ag-theme-alpine-dark .ag-row-group-expanded {
+  background: rgba(34, 211, 238, 0.03);
+}
+
+.ag-theme-alpine-dark .ag-details-row {
+  background: #0c1120;
+  border-bottom: 2px solid var(--apex-border);
+}
+
+.ag-theme-alpine-dark .ag-cell-focus {
+  border-color: var(--apex-accent) !important;
+}
+
+.ag-theme-alpine-dark .ag-checkbox-input-wrapper.ag-checked::after {
+  color: var(--apex-accent);
+}
+
+/* Dark mode overrides for PrimeVue */
+.dark {
+  --p-surface-0: #0b0f19;
+  --p-surface-50: #111827;
+  --p-surface-100: #151f2e;
+  --p-surface-200: #1f2937;
+  --p-surface-300: #334155;
+  --p-surface-400: #475569;
+  --p-surface-500: #64748b;
+  --p-surface-600: #94a3b8;
+  --p-surface-700: #cbd5e1;
+  --p-surface-800: #e2e8f0;
+  --p-surface-900: #f8fafc;
+}
+
+/* Light mode overrides */
+.light {
+  --p-surface-0: #ffffff;
+  --p-surface-50: #f8fafc;
+  --p-surface-100: #f1f5f9;
+  --p-surface-200: #e2e8f0;
+  --p-surface-300: #cbd5e1;
+  --p-surface-400: #94a3b8;
+  --p-surface-500: #64748b;
+  --p-surface-600: #475569;
+  --p-surface-700: #334155;
+  --p-surface-800: #1e293b;
+  --p-surface-900: #0f172a;
+}
+
+/* PrimeVue Select - Ensure selected value text is visible */
+.p-select-label {
+  color: var(--apex-text) !important;
+}
+
+.p-select-input {
+  color: var(--apex-text) !important;
+}
+
+/* PrimeVue Drawer - Force dark background */
+.p-drawer {
+  background: var(--apex-surface) !important;
+}
+
+.p-drawer-content {
+  background: var(--apex-surface) !important;
+}
+
+.p-drawer-header {
+  background: var(--apex-surface) !important;
+}
+
+.p-drawer-body {
+  background: var(--apex-surface) !important;
+}
+
+/* PrimeVue TabView - Force theme-aware background */
+.p-tabview {
+  background: var(--astra-surface) !important;
+  color: var(--astra-text) !important;
+}
+
+.p-tabview .p-tabview-panels {
+  background: var(--astra-surface) !important;
+}
+
+.p-tabview .p-tabview-panel {
+  background: var(--astra-surface) !important;
+  color: var(--astra-text) !important;
+}
+
+.p-tabview-panel-content {
+  background: var(--astra-surface) !important;
+  color: var(--astra-text) !important;
+}
+
+/* Tab content area */
+.p-tabview-content {
+  background: var(--astra-surface) !important;
+}
+
+.p-tabview .p-tabview-nav-container {
+  background: var(--astra-surface-2) !important;
+}
+
+/* Override PrimeVue Aura theme for tabs - use aggressive selectors */
+body .p-tabview .p-tabview-nav {
+  background: var(--astra-surface-2) !important;
+}
+
+body .p-tabview .p-tabview-nav li .p-tabview-nav-link {
+  background: var(--astra-surface-2) !important;
+  color: var(--astra-muted) !important;
+}
+
+body .p-tabview .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+  background: var(--astra-surface) !important;
+  color: var(--astra-accent) !important;
+}
+
+body .p-tabview .p-tabview-panels {
+  background: var(--astra-surface) !important;
+}
+
+.p-tabview-nav {
+  background: var(--astra-surface-2) !important;
+  border-color: var(--astra-border) !important;
+}
+
+.p-tabview-nav li .p-tabview-nav-link {
+  background: var(--astra-surface-2) !important;
+  color: var(--astra-muted) !important;
+  border-color: var(--astra-border) !important;
+}
+
+.p-tabview-nav li.p-highlight .p-tabview-nav-link {
+  background: var(--astra-surface) !important;
+  color: var(--astra-accent) !important;
+  border-color: var(--astra-accent) !important;
+}
+
+.p-tabview .p-tabview-ink-bar {
+  background: var(--astra-accent) !important;
+}
+
+/* Force tab header colors */
+.p-tabview .p-tabview-nav li a,
+.p-tabview .p-tabview-nav li .p-tabview-nav-link {
+  background-color: var(--astra-surface-2) !important;
+  color: var(--astra-muted) !important;
+}
+
+.p-tabview .p-tabview-nav li.p-highlight a,
+.p-tabview .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+  background-color: var(--astra-surface) !important;
+  color: var(--astra-text) !important;
+}
+
+/* PrimeVue Splitter */
+.p-splitter {
+  background: var(--astra-surface) !important;
+  border-color: var(--astra-border) !important;
+}
+
+.p-splitter-gutter {
+  background: var(--astra-border) !important;
+}
+
+.p-splitter-panel {
+  overflow: auto !important;
+}
+
+/* Always show scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--astra-surface-2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--astra-border);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--astra-muted);
+}
+
+.p-drawer-footer {
+  background: var(--apex-surface) !important;
+}
+
+/* PrimeVue Dialog - Force theme-aware colors */
+.p-dialog {
+  background: var(--apex-surface) !important;
+  color: var(--apex-text) !important;
+  border: 1px solid var(--apex-border) !important;
+}
+
+.p-dialog-header {
+  background: var(--apex-surface) !important;
+  color: var(--apex-text) !important;
+  border-bottom: 1px solid var(--apex-border) !important;
+}
+
+.p-dialog-content {
+  background: var(--apex-surface) !important;
+  color: var(--apex-text) !important;
+}
+
+.p-dialog-footer {
+  background: var(--apex-surface) !important;
+  border-top: 1px solid var(--apex-border) !important;
+}
+
+/* PrimeVue Sidebar - Force theme-aware colors */
+.p-sidebar {
+  background: var(--apex-surface) !important;
+  color: var(--apex-text) !important;
+}
+
+.p-sidebar-header {
+  background: var(--apex-surface) !important;
+  color: var(--apex-text) !important;
+  border-bottom: 1px solid var(--apex-border) !important;
+}
+
+.p-sidebar-content {
+  background: var(--apex-surface) !important;
+  color: var(--apex-text) !important;
+}
+
+/* PrimeVue Select dropdown panel */
+.p-select {
+  background: var(--apex-surface-2) !important;
+  border-color: var(--apex-border) !important;
+  color: var(--apex-text) !important;
+}
+
+.p-select-overlay,
+.p-select-panel {
+  background: var(--apex-surface-2) !important;
+  border: 1px solid var(--apex-border) !important;
+  color: var(--apex-text) !important;
+}
+
+.p-select-option {
+  color: var(--apex-text) !important;
+}
+
+.p-select-option:hover,
+.p-select-option.p-focus {
+  background: rgba(34, 211, 238, 0.1) !important;
+  color: var(--apex-text) !important;
+}
+
+.p-select-option.p-selected {
+  background: rgba(34, 211, 238, 0.18) !important;
+  color: var(--apex-accent) !important;
+}
+
+.p-select-filter {
+  background: var(--apex-surface) !important;
+  color: var(--apex-text) !important;
+  border-color: var(--apex-border) !important;
+}
+
+/* PrimeVue InputText */
+.p-inputtext {
+  background: var(--apex-surface-2) !important;
+  color: var(--apex-text) !important;
+  border-color: var(--apex-border) !important;
+}
+
+.p-inputtext::placeholder {
+  color: var(--apex-muted) !important;
+}
+
+.p-inputtext:focus {
+  border-color: var(--apex-accent) !important;
+  box-shadow: 0 0 0 1px var(--apex-accent) !important;
+}
+
+/* PrimeVue InputNumber */
+.p-inputnumber-input {
+  background: var(--apex-surface-2) !important;
+  color: var(--apex-text) !important;
+  border-color: var(--apex-border) !important;
+}
+
+.p-inputnumber-button {
+  background: var(--apex-surface-2) !important;
+  color: var(--apex-text) !important;
+  border-color: var(--apex-border) !important;
+}
+
+.p-inputnumber-button:hover {
+  background: rgba(34, 211, 238, 0.1) !important;
+  color: var(--apex-accent) !important;
+}
+
+/* ── Simulator subsystem MultiSelect – PrimeVue v4 overrides ── */
+.sim-subsystem-select .p-multiselect-label,
+.sim-subsystem-select span.p-multiselect-label {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+.sim-subsystem-select .p-multiselect-label.p-placeholder {
+  color: #94a3b8 !important;
+}
+/* Panel option rows (appended to body, so must be global) */
+.p-multiselect-overlay .p-multiselect-option {
+  color: #e2e8f0 !important;
+}
+.p-multiselect-overlay .p-multiselect-option:hover,
+.p-multiselect-overlay .p-multiselect-option.p-focus {
+  color: #ffffff !important;
+  background: rgba(34, 211, 238, 0.12) !important;
+}
+.p-multiselect-overlay .p-multiselect-option.p-selected {
+  color: #ffffff !important;
+  background: rgba(34, 211, 238, 0.2) !important;
+}
+
+/* ── AG Grid ValueCellEditor – AutoComplete dark panel ── */
+.p-autocomplete-overlay {
+  background: var(--apex-surface) !important;
+  border: 1px solid rgba(34, 211, 238, 0.4) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+}
+
+.p-autocomplete-overlay .p-autocomplete-list {
+  background: transparent !important;
+  padding: 4px 0 !important;
+}
+
+.p-autocomplete-overlay .p-autocomplete-option {
+  color: #cbd5e1 !important;
+  background: transparent !important;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+  font-size: 13px !important;
+  padding: 7px 14px !important;
+}
+
+.p-autocomplete-overlay .p-autocomplete-option:hover,
+.p-autocomplete-overlay .p-autocomplete-option.p-focus {
+  background: rgba(34, 211, 238, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.p-autocomplete-overlay .p-autocomplete-option.p-selected {
+  background: rgba(34, 211, 238, 0.2) !important;
+  color: var(--apex-accent) !important;
+  font-weight: 600 !important;
+}

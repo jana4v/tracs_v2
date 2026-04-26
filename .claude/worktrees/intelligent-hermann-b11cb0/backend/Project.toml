@@ -1,0 +1,23 @@
+name = "ASTRA"
+uuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+version = "1.0.0"
+authors = ["ASTRA Development Team"]
+
+[deps]
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+Genie = "c43c736e-a2d1-11e8-161f-af95117fbd1e"
+JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
+Mongoc = "4fe8b98c-fc19-5c23-8ec2-168ff83495f2"
+Redis = "0cf705f9-a9e2-50d1-a699-2b372a39b750"
+Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
+StructTypes = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
+XLSX = "fdbf4ff8-1666-58a4-91e7-1b58723a45e0"
+
+[compat]
+Genie = "5"
+JSON3 = "1"
+Mongoc = "0.9"
+Redis = "2, 3"
+XLSX = "0.10.4"
+julia = "1.9"

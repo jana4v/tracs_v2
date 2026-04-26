@@ -1,0 +1,25 @@
+services:
+  chainmon:
+    enabled: true
+    config: ../chainmon/config.yaml
+  comparator:
+    enabled: true
+    config: ../comparator/config.yaml
+  gateway:
+    enabled: true
+    config: ../gateway/config.yaml
+  ingest:
+    enabled: true
+    config: ../ingest/config.yaml
+  limiter:
+    enabled: true
+    config: ../limiter/config.yaml
+  simulator:
+    enabled: true
+    config: ../simulator/config.yaml
+  storage:
+    enabled: true
+    config: ../storage/config.yaml
+  umacs_tc:
+    enabled: true
+    config: ../umacs-tc/config.yaml

@@ -1,0 +1,4 @@
+{"time":"2026-04-05T22:38:58.4401844+05:30","level":"INFO","msg":"connected to Redis","service":"tm-gateway","addr":"localhost:6379"}
+{"time":"2026-04-05T22:38:58.4617228+05:30","level":"INFO","msg":"connected to SQLite","service":"tm-gateway","path":"./astra.db"}
+{"time":"2026-04-05T22:38:58.4638362+05:30","level":"INFO","msg":"starting HTTP server","service":"tm-gateway","addr":":21000"}
+{"time":"2026-04-05T22:38:58.4659387+05:30","level":"ERROR","msg":"HTTP server error","service":"tm-gateway","error":"listen tcp :21000: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted."}

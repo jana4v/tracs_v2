@@ -1,0 +1,100 @@
+Task:
+
+You are a software architect. Design a complete Julia-based satellite test system using a custom DSL (ASTRA) for defining test procedures. The system will be used by engineers who may not have programming experience. Provide a detailed architecture including system components, data flow, module responsibilities, and integration points. Include support for:
+
+ASTRA DSL features:
+
+Single TEST_NAME per procedure file
+
+DSL statements: PRE_TEST_REQ, SEND, SENDTCP, WAIT, CHECK, EXPECTED, ALERT_MSG, ABORT_TEST --provision should be exist to add new statements
+
+Control flow: IF / ELSE / END, FOR / END, WHILE / END
+
+Cross-procedure calls using CALL
+
+Inline Julia code for advanced computations
+
+ON_FAIL / ON_TIMEOUT optional blocks
+
+TM references in the form TM1.xyz_sts
+
+Execution Features:
+
+Step-by-step execution for GUI (line-by-line)
+
+Full execution of procedures
+
+Cross-procedure execution
+
+Inline Julia evaluation
+
+Accurate error reporting mapped to .tst file line numbers
+
+Syntax checking before execution
+
+System Components:
+
+Julia backend: DSL interpreter, execution engine, step engine, TM interface
+
+Web-based frontend: Monaco Editor or equivalent for editing procedures
+
+Communication layer: WebSocket or HTTP API between frontend and Julia backend
+
+Data storage/logging: procedure results, telemetry data, error logs
+
+Optional Enhancements:
+
+Multiple .tst file support (modular procedures)
+
+Autocomplete for TM variables and DSL statements
+
+GUI highlighting of current line during step execution
+
+Simulation vs live execution modes
+
+Support for hardware-in-the-loop testing
+
+Deliverables from Claude:
+
+High-level system architecture diagram or description (modules, components, and their interactions)
+
+Data flow between frontend, backend, and test hardware
+
+Description of how DSL is parsed, validated, and executed
+
+Step execution design
+
+Error handling and reporting design
+
+Suggestions for modularity, scalability, and future extensions
+
+Constraints:
+
+Users may not have programming knowledge
+
+System must be robust for satellite testing operations
+
+Backend must be Julia-based
+
+DSL syntax should be beginner-friendly (like examples shared)
+
+
+
+
+Example with mixed DSL + Julia:
+
+TEST_NAME 4rw-config1
+PRE_TEST_REQ TM1.xyz_sts == "on"
+SEND START_RW
+WAIT 5
+
+# Julia code
+adjusted = TM1.abc + 10
+println("Adjusted value: ", adjusted)
+
+IF adjusted > 50
+    SEND START_RW
+ELSE
+    ALERT_MSG "Value too low"
+END
+

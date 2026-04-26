@@ -1,0 +1,5 @@
+[paths]
+#main_dist = "./webApps/main"
+main_dist = "../gui"
+spasdacs_dist = "../spasdacs/generated_webapp/dist"
+

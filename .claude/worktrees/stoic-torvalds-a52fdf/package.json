@@ -1,0 +1,18 @@
+{
+  "name": "astra-automation",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "language-server"
+  ],
+  "scripts": {
+    "dev": "concurrently -n FE,LSP -c blue,green \"yarn workspace astra-frontend dev\" \"yarn workspace astra-language-server dev\"",
+    "dev:julia": "julia --project=backend backend/app.jl",
+    "dev:all": "concurrently -n FE,LSP,JL -c blue,green,magenta \"yarn workspace astra-frontend dev\" \"yarn workspace astra-language-server dev\" \"julia --project=backend backend/app.jl\"",
+    "build": "yarn workspace astra-frontend build && yarn workspace astra-language-server build",
+    "install:all": "yarn install && cd backend && julia -e \"using Pkg; Pkg.instantiate()\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

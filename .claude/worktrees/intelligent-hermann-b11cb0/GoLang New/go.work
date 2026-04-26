@@ -1,0 +1,16 @@
+go 1.24.0
+
+use (
+	./chainmon
+	./comparator
+	./gateway
+	./iam
+	./ingest
+	./internal
+	./launcher
+	./limiter
+	./simulator
+	./storage
+	./umacs-tc
+	./umacs-tc-emulator
+)

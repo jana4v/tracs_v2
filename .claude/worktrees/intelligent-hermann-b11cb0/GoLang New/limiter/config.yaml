@@ -1,0 +1,14 @@
+service:
+  name: tm-limiter
+  log_level: info
+
+redis:
+  addr: localhost:6379
+  password: ""
+  db: 0
+
+sqlite:
+  path: "./astra.db"
+  in_memory: false
+
+poll_interval_ms: 500

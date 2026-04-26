@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wait for Redis Channel Value Endpoint Documentation</title>
+</head>
+<body>
+    <h1>Wait for Redis Channel Value Endpoint Documentation</h1>
+    <h2>POST /wait_for_redis_channel_value</h2>
+    <p>Subscribes to a Redis channel and waits for a specific command value. If the command is received within the timeout period, it responds with the command. Otherwise, it times out.</p>
+    <h3>Request</h3>
+    <pre>
+        Headers:
+            Content-Type: application/json
+        Body:
+        {
+            "value": "exampleCommand",
+            "channel_name": "exampleChannel",
+            "timeout": 30
+        }
+    </pre>
+    <h3>Response</h3>
+    <pre>
+        Headers:
+            Content-Type: text/plain
+        Body:
+            Received command: exampleCommand
+    </pre>
+    <h3>Example Request</h3>
+    <pre>
+        curl -X POST \
+        http://localhost:8080/wait_for_redis_channel_value \
+        -H 'Content-Type: application/json' \
+        -d '{
+              "value": "exampleCommand",
+              "channel_name": "exampleChannel",
+              "timeout": 30
+            }'
+    </pre>
+    <h3>Example Response</h3>
+    <pre>
+        Received command: exampleCommand
+    </pre>
+    <h3>Error Responses</h3>
+    <pre>
+        Status Code: 400 Bad Request
+        Body:
+        {
+            "error": "Invalid request payload"
+        }
+
+        Status Code: 400 Bad Request
+        Body:
+        {
+            "error": "Command and ChannelName fields are required"
+        }
+        
+        Status Code: 408 Request Timeout
+        Body:
+        {
+            "error": "Timeout waiting for command"
+        }
+    </pre>
+</body>
+</html>

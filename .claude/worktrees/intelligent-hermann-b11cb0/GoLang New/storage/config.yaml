@@ -1,0 +1,20 @@
+service:
+  name: tm-storage
+  log_level: info
+
+redis:
+  addr: localhost:6379
+  password: ""
+  db: 0
+
+sqlite:
+  path: "./astra.db"
+  in_memory: false
+
+influx:
+  url: http://localhost:8086
+  token: ""
+  org: mainframe
+  database: telemetry
+
+poll_interval_ms: 500

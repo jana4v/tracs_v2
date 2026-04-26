@@ -1,0 +1,59 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "PdfApp/1.0.0": {
+        "dependencies": {
+          "Weasyprint.Wrapped": "10.1.0"
+        },
+        "runtime": {
+          "PdfApp.dll": {}
+        }
+      },
+      "CliWrap/3.9.0": {
+        "runtime": {
+          "lib/net9.0/CliWrap.dll": {
+            "assemblyVersion": "3.9.0.0",
+            "fileVersion": "3.9.0.0"
+          }
+        }
+      },
+      "Weasyprint.Wrapped/10.1.0": {
+        "dependencies": {
+          "CliWrap": "3.9.0"
+        },
+        "runtime": {
+          "lib/netstandard2.0/Weasyprint.Wrapped.dll": {
+            "assemblyVersion": "0.0.1.0",
+            "fileVersion": "0.0.1.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "PdfApp/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "CliWrap/3.9.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-3IpuZUbTsWhgD3jhd5mKK7VVyVu/LhfsHXUlYrAOV8mZkJCTasum8Klgv7wyMIl5tttwUralTuTQzCNDLicMRw==",
+      "path": "cliwrap/3.9.0",
+      "hashPath": "cliwrap.3.9.0.nupkg.sha512"
+    },
+    "Weasyprint.Wrapped/10.1.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-bNL8/LNcjOWoY/4+mZbunEKVMxTgg1GQP1mbHw6o7NigTbz1RY+lfh1H4Md6LBFwBwaIkLlygTgO+YaQu7ZETQ==",
+      "path": "weasyprint.wrapped/10.1.0",
+      "hashPath": "weasyprint.wrapped.10.1.0.nupkg.sha512"
+    }
+  }
+}

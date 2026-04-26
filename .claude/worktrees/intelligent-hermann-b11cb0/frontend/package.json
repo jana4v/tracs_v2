@@ -1,0 +1,38 @@
+{
+  "name": "astra-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "generate": "nuxt generate"
+  },
+  "dependencies": {
+    "@guolao/vue-monaco-editor": "^1.5.0",
+    "@primevue/themes": "^4.3.0",
+    "ag-grid-community": "^35.1.0",
+    "ag-grid-enterprise": "^35.1.0",
+    "ag-grid-vue3": "^35.1.0",
+    "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@~8.0.4",
+    "monaco-languageclient": "^8.8.0",
+    "pinia": "^3.0.0",
+    "primeicons": "^7.0.0",
+    "primevue": "^4.3.0",
+    "vscode": "npm:@codingame/monaco-vscode-api@~8.0.4",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-ws-jsonrpc": "^3.0.0"
+  },
+  "devDependencies": {
+    "@nuxtjs/color-mode": "^4.0.0",
+    "@pinia/nuxt": "^0.9.0",
+    "@primevue/nuxt-module": "^4.3.0",
+    "@unocss/nuxt": "^0.65.0",
+    "nuxt": "^3.16.0",
+    "sass-embedded": "^1.97.3",
+    "typescript": "^5.7.0",
+    "unocss": "^0.65.0",
+    "vue-tsc": "^2.0.0"
+  }
+}

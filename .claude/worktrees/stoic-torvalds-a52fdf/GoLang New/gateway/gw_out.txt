@@ -1,0 +1,6 @@
+{"time":"2026-04-05T22:40:01.4195823+05:30","level":"INFO","msg":"connected to Redis","service":"tm-gateway","addr":"localhost:6379"}
+{"time":"2026-04-05T22:40:01.4317963+05:30","level":"INFO","msg":"connected to SQLite","service":"tm-gateway","path":"./astra.db"}
+{"time":"2026-04-05T22:40:01.4339034+05:30","level":"INFO","msg":"starting HTTP server","service":"tm-gateway","addr":":21000"}
+{"time":"2026-04-05T22:40:05.2615008+05:30","level":"INFO","msg":"GetTMMnemonics called","service":"tm-gateway","query":{}}
+{"time":"2026-04-05T22:40:05.2646929+05:30","level":"INFO","msg":"GetTMMnemonics result","service":"tm-gateway","count":0}
+2026/04/05 22:40:05 "GET http://localhost:21000/api/go/v1/mnemonics/tm HTTP/1.1" from [::1]:60777 - 200 3B in 5.3194ms

@@ -1,0 +1,10 @@
+{
+"database_page":{
+"systems":["transmitter","receiver","transponder"],
+"transmitter_specifications":["power","frequency","modulation_index","spurious"],
+"receiver_specifications":["command_threshold"],
+"transponder_specifications":["ranging_threshold"]
+}
+}
+
+
