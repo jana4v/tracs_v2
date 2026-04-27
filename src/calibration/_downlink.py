@@ -9,7 +9,7 @@ from src.InstrumentApi.PowerMeter.BaseClass import PowerMeter
 from src.InstrumentApi.SignalGenerator.BaseClass import SignalGenerator
 from src.InstrumentApi.SpectrumAnalyzer.BaseClass import SpectrumAnalyzer
 from src.InstrumentApi.factory import get_instrument
-from src.services.switch_driver_paths import apply_switch_driver_paths, build_address, normalize_model
+from src.services.switch_driver_paths import apply_switch_driver_paths, build_address, collect_switch_driver_commands, normalize_model
 
 from .base import CalibrationDependencies, CalibrationProcedure
 
@@ -116,8 +116,8 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
             await spectrum_analyzer.preset_instrument()
             await spectrum_analyzer.set_resolution_bandwidth_auto_on_off("OFF")
             await spectrum_analyzer.set_video_bandwidth_auto_on_off("OFF")
-            await spectrum_analyzer.set_resolution_bandwidth(1)
-            await spectrum_analyzer.set_video_bandwidth(1)
+            await spectrum_analyzer.set_resolution_bandwidth(30)
+            await spectrum_analyzer.set_video_bandwidth(3)
             await spectrum_analyzer.set_span(5)
 
             await service.set_running(runtime, "Calibration run started")
@@ -127,34 +127,47 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
 
             ordered_groups = sorted(
                 grouped.items(),
-                key=lambda item: (item[0][0], item[0][1]),
+                key=lambda item: (item[0][1], item[0][0]),
             )
+
+            inject_tsm_rows = self._get_inject_switch_rows(deps)
+            active_port: str | None = None
+            active_switch_signature: tuple[tuple[str, tuple[str, ...]], ...] | None = None
 
             for (code, port), frequencies in ordered_groups:
                 if runtime.abort_requested:
                     await service.abort_runtime(runtime, "Calibration aborted by user")
                     return
 
-                prompt_channel = self._build_prompt_channel(payload.channels, code, port, frequencies)
+                tsm_rows = self._get_group_switch_rows(deps, code, port)
+                current_switch_signature = self._build_switch_signature(tsm_rows)
+                needs_switch_update = port != active_port or current_switch_signature != active_switch_signature
+
                 cable_name = f"{code}/{port}" if port else code
                 if cable_name.strip() == "":
                     cable_name = "selected cable"
-                await service.prompt_operator(
-                    runtime,
-                    f"Connect {cable_name} cable to CalSignalGenerator",
-                    prompt_channel,
-                )
-                if runtime.abort_requested:
-                    await service.abort_runtime(runtime, "Calibration aborted by user")
-                    return
+                if needs_switch_update:
+                    prompt_channel = self._build_prompt_channel(payload.channels, code, port, frequencies)
+                    await service.prompt_operator(
+                        runtime,
+                        f"Connect {cable_name} cable to CalSignalGenerator",
+                        prompt_channel,
+                    )
+                    if runtime.abort_requested:
+                        await service.abort_runtime(runtime, "Calibration aborted by user")
+                        return
 
-                tsm_rows = self._get_group_switch_rows(deps, code, port)
-                await service.push_status(runtime, f"Applying SDU switch path commands for {cable_name}")
-                applied = await apply_switch_driver_paths(tsm_rows, instruments)
-                if len(applied) == 0:
-                    raise ValueError(f"No SDU switch commands were parsed for {cable_name}")
-
-                inject_tsm_rows = self._get_inject_switch_rows(deps)
+                    await service.push_status(runtime, f"Applying SDU switch path commands for {cable_name}")
+                    applied = await apply_switch_driver_paths(tsm_rows, instruments)
+                    if len(applied) == 0:
+                        raise ValueError(f"No SDU switch commands were parsed for {cable_name}")
+                    applied_inject = await apply_switch_driver_paths(inject_tsm_rows, instruments)
+                    if len(applied_inject) == 0:
+                        raise ValueError("No SDU switch commands were parsed for INJECT_CAL")
+                    active_port = port
+                    active_switch_signature = current_switch_signature
+                else:
+                    await service.push_status(runtime, f"Reusing existing SDU switch path for {cable_name}")
 
                 for frequency in frequencies:
                     if runtime.abort_requested:
@@ -173,16 +186,14 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
                     await spectrum_analyzer.set_center_frequency(frequency)
                     await spectrum_analyzer.set_peak_search(1)
                     await asyncio.sleep(1.0)
-                    measured_sa_peak = float(await spectrum_analyzer.get_delta_marker_delta_y_value(1))
+                    measured_sa_peak = float(await spectrum_analyzer.get_marker_value_y_data(1))
 
                     await service.push_status(
                         runtime,
                         f"{cable_name} @ {frequency} MHz: SG set={cal_sg_setpoint:.2f} dBm, SA peak={measured_sa_peak:.2f} dBm",
                     )
 
-                    applied_inject = await apply_switch_driver_paths(inject_tsm_rows, instruments)
-                    if len(applied_inject) == 0:
-                        raise ValueError("No SDU switch commands were parsed for INJECT_CAL")
+                    
 
                     inject_frequency = frequency + 1.0
                     desired_power_meter_level = measured_sa_peak - (inject_sa_loss - inject_pm_loss)
@@ -211,8 +222,8 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
                     await spectrum_analyzer.set_delta_marker_maximum_next(2)
                     await asyncio.sleep(0.5)
 
-                    downlink_peak_value = float(await spectrum_analyzer.get_delta_marker_delta_y_value(1))
-                    delta_uncertainty = abs(float(await spectrum_analyzer.get_delta_marker_delta_y_value(2)))
+                    downlink_peak_value = float(await spectrum_analyzer.get_marker_value_y_data(1))
+                    delta_uncertainty = float(await spectrum_analyzer.get_delta_marker_delta_y_value(2))
                     measured_value = round(downlink_peak_value - delta_uncertainty, 1)
 
                     completed += 1
@@ -237,7 +248,7 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
                     )
 
                     # Restore downlink path before next frequency for this cable.
-                    await apply_switch_driver_paths(tsm_rows, instruments)
+                    # await apply_switch_driver_paths(tsm_rows, instruments)
 
             await service.complete_runtime(runtime, "Calibration run completed")
         except Exception as exc:
@@ -365,6 +376,13 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
         if len(rows) == 0:
             raise ValueError("No TSM path rows found for code INJECT_CAL in Test Systems > TSM Paths")
         return rows
+
+    def _build_switch_signature(self, tsm_rows: list[dict[str, Any]]) -> tuple[tuple[str, tuple[str, ...]], ...]:
+        commands = collect_switch_driver_commands(tsm_rows)
+        return tuple(
+            (driver, tuple(driver_commands))
+            for driver, driver_commands in sorted(commands.items())
+        )
 
     def _build_signal_generator(self, config: dict[str, str]) -> SignalGenerator:
         model = normalize_model(config.get("model", ""))

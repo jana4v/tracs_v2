@@ -101,8 +101,18 @@ class InstrumentBaseClass:
         ):
             effective_protocol = InterfaceProtocols.GPIB.value
 
+        # For GPIB instruments encode bus index so the remote server can
+        # reconstruct the exact board+address instead of defaulting to bus 0.
+        if not self.is_lan_based_instrument():
+            instrument_address = (
+                f"GPIB{self.address.port_or_gpib_bus}"
+                f"::{self.address.ip_or_gpib_address}::INSTR"
+            )
+        else:
+            instrument_address = str(self.address.ip_or_gpib_address)
+
         req = RemoteRequest(
-            instrument_address=str(self.address.ip_or_gpib_address),
+            instrument_address=instrument_address,
             command_string=command,
             read_operation=read_operation,
             protocol=effective_protocol,
