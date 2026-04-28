@@ -39,6 +39,20 @@ class CalSgDataRowsResponse(BaseModel):
     rows: List[CalSgDataRow]
 
 
+class DownlinkCalDataRow(BaseModel):
+    code: str
+    port: str
+    frequency: float
+    frequency_label: str = ""
+    value: float
+    datetime: str
+
+
+class DownlinkCalDataRowsResponse(BaseModel):
+    cal_id: str
+    rows: List[DownlinkCalDataRow]
+
+
 class CalibrationChannel(BaseModel):
     code: str
     port: str
@@ -106,3 +120,9 @@ class CalibrationReportGenerateResponse(BaseModel):
     pdf_generated: bool
     excel_rows_appended: int
     message: str
+
+
+class MeasureOptionsResponse(BaseModel):
+    test_phases: List[str]
+    cal_ids: List[str]
+    default_cal_id: str | None = None

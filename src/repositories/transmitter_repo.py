@@ -9,6 +9,8 @@ from src.schemas.transmitter_test_parameters import (
 )
 from src.schemas.transmitter import TransmitterCreate, TransmitterResponse
 from src.schemas.enums import ModulationType, SystemType
+from src.database.system_catalog import get_catalog_store
+from src.repositories.system_catalog_repo import SystemCatalogRepository
 
 
 transmitter_response_adapter = TypeAdapter(TransmitterResponse)
@@ -48,6 +50,16 @@ class TransmitterRepository:
         self.collection = collection
         self.tsm_paths_collection = tsm_paths_collection
         self.misc_collection = misc_collection or collection
+        self._catalog_repo: Optional[SystemCatalogRepository] = None
+
+    def _get_catalog_repo(self) -> Optional[SystemCatalogRepository]:
+        if self._catalog_repo is not None:
+            return self._catalog_repo
+        try:
+            self._catalog_repo = SystemCatalogRepository(get_catalog_store(), self.collection)
+            return self._catalog_repo
+        except Exception:
+            return None
 
     def _flatten_ports(self, ports: Any) -> list[str]:
         if not isinstance(ports, list):
@@ -131,39 +143,68 @@ class TransmitterRepository:
             if doc_id:
                 self.tsm_paths_collection.delete_one({"_id": doc_id})
 
-    def get_all(self) -> List[TransmitterResponse]:
+    def get_all_for_system_type(self, system_type: SystemType) -> List[TransmitterResponse]:
         cursor = self.collection.find(
-            {"system_type": SystemType.Transmitter.value},
+            {"system_type": system_type.value},
             {"_id": 0},
         )
         return [transmitter_response_adapter.validate_python(doc) for doc in cursor]
 
-    def get_by_code(self, code: str) -> Optional[TransmitterResponse]:
+    def get_all(self) -> List[TransmitterResponse]:
+        return self.get_all_for_system_type(SystemType.Transmitter)
+
+    def get_by_code_for_system_type(self, code: str, system_type: SystemType) -> Optional[TransmitterResponse]:
         doc = self.collection.find_one(
-            {"system_type": SystemType.Transmitter.value, "code": code},
+            {"system_type": system_type.value, "code": code},
             {"_id": 0},
         )
         return transmitter_response_adapter.validate_python(doc) if doc else None
 
-    def upsert(self, transmitter: TransmitterCreate) -> TransmitterResponse:
+    def get_by_code(self, code: str) -> Optional[TransmitterResponse]:
+        return self.get_by_code_for_system_type(code, SystemType.Transmitter)
+
+    def upsert_for_system_type(self, transmitter: TransmitterCreate, system_type: SystemType) -> TransmitterResponse:
         """Insert or update by code (upsert semantics)."""
         doc = transmitter.model_dump()
+        doc["system_type"] = system_type.value
         self.collection.update_one(
-            {"system_type": SystemType.Transmitter.value, "code": transmitter.code},
+            {"system_type": system_type.value, "code": transmitter.code},
             {"$set": doc},
             upsert=True,
         )
-        ports = self._flatten_ports((doc.get("modulation_details") or {}).get("ports"))
-        self._sync_tsm_rows_for_transmitter(str(transmitter.code), ports)
+        if system_type == SystemType.Transmitter:
+            ports = self._flatten_ports((doc.get("modulation_details") or {}).get("ports"))
+            self._sync_tsm_rows_for_transmitter(str(transmitter.code), ports)
+
+        catalog_repo = self._get_catalog_repo()
+        if catalog_repo is not None:
+            details = (doc.get("modulation_details") or {}) if isinstance(doc.get("modulation_details"), dict) else {}
+            catalog_repo.sync_system_catalog_from_form(
+                system_kind=str(system_type.value).strip().lower(),
+                system_code=str(transmitter.code),
+                ports=details.get("ports") if isinstance(details.get("ports"), list) else [],
+                frequencies=details.get("frequencies") if isinstance(details.get("frequencies"), list) else [],
+            )
+
         return transmitter_response_adapter.validate_python(doc)
 
-    def delete(self, code: str) -> bool:
+    def upsert(self, transmitter: TransmitterCreate) -> TransmitterResponse:
+        return self.upsert_for_system_type(transmitter, SystemType.Transmitter)
+
+    def delete_for_system_type(self, code: str, system_type: SystemType) -> bool:
         result = self.collection.delete_one(
-            {"system_type": SystemType.Transmitter.value, "code": code}
+            {"system_type": system_type.value, "code": code}
         )
         if result.deleted_count > 0:
-            self._delete_tsm_rows_for_transmitter(code)
+            if system_type == SystemType.Transmitter:
+                self._delete_tsm_rows_for_transmitter(code)
+            catalog_repo = self._get_catalog_repo()
+            if catalog_repo is not None:
+                catalog_repo.delete_system(str(system_type.value).strip().lower(), code)
         return result.deleted_count > 0
+
+    def delete(self, code: str) -> bool:
+        return self.delete_for_system_type(code, SystemType.Transmitter)
 
     def code_exists(self, code: str) -> bool:
         return self.collection.find_one(

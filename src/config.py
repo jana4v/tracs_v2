@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     CALIBRATION_RUNS_COLLECTION: str = "CalibrationRuns"
     CAL_SG_CALIBRATION_TABLE: str = "CalSGCalibrationData"
     INJECT_CAL_CALIBRATION_TABLE: str = "InjectCalCalibrationData"
+    DOWNLINK_CAL_CALIBRATION_TABLE: str = "DownlinkCalCalibrationData"
+    TEST_PHASES_TABLE: str = "TestPhases"
 
     class Config:
         env_file = ".env"

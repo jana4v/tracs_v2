@@ -71,7 +71,7 @@ class AG_4419B(PowerMeter):
         count = 0
         while abs(value1 - previous_value) > 0.1 and count < 4:
             previous_value = value1
-            time.sleep(1)
+            time.sleep(0.5)
             value1 = float(self.command(code, read_operation=True))
             count += 1
         return value1

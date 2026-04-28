@@ -9,6 +9,7 @@ from src.InstrumentApi.PowerMeter.BaseClass import PowerMeter
 from src.InstrumentApi.SignalGenerator.BaseClass import SignalGenerator
 from src.InstrumentApi.SpectrumAnalyzer.BaseClass import SpectrumAnalyzer
 from src.InstrumentApi.factory import get_instrument
+from src.schemas.calibration_data import CalibrationChannel
 from src.services.switch_driver_paths import apply_switch_driver_paths, build_address, collect_switch_driver_commands, normalize_model
 
 from .base import CalibrationDependencies, CalibrationProcedure
@@ -29,7 +30,7 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
             required_frequency_keys = {
                 self._frequency_key(freq)
                 for frequencies in grouped.values()
-                for freq in frequencies
+                for freq, _ in frequencies
             }
 
             cal_id = str(runtime.cal_id or "").strip()
@@ -108,7 +109,7 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
 
             await inject_signal_generator.preset_instrument()
             await inject_signal_generator.set_power_level(-80.0)
-            await inject_signal_generator.set_rf_on()
+            
 
             await downlink_power_meter.preset_instrument()
             await downlink_power_meter.set_channel_limits(dl_pm_channel_number, -50, 30)
@@ -131,6 +132,7 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
             )
 
             inject_tsm_rows = self._get_inject_switch_rows(deps)
+            active_code: str | None = None
             active_port: str | None = None
             active_switch_signature: tuple[tuple[str, tuple[str, ...]], ...] | None = None
 
@@ -141,12 +143,20 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
 
                 tsm_rows = self._get_group_switch_rows(deps, code, port)
                 current_switch_signature = self._build_switch_signature(tsm_rows)
-                needs_switch_update = port != active_port or current_switch_signature != active_switch_signature
+                needs_switch_update = (
+                    code != active_code
+                    or port != active_port
+                    or current_switch_signature != active_switch_signature
+                )
 
                 cable_name = f"{code}/{port}" if port else code
                 if cable_name.strip() == "":
                     cable_name = "selected cable"
                 if needs_switch_update:
+                    await service.push_status(runtime, "Turning RF OFF on Cal/Inject generators before cable switch prompt")
+                    await cal_signal_generator.set_rf_off()
+                    await inject_signal_generator.set_rf_off()
+
                     prompt_channel = self._build_prompt_channel(payload.channels, code, port, frequencies)
                     await service.prompt_operator(
                         runtime,
@@ -164,12 +174,13 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
                     applied_inject = await apply_switch_driver_paths(inject_tsm_rows, instruments)
                     if len(applied_inject) == 0:
                         raise ValueError("No SDU switch commands were parsed for INJECT_CAL")
+                    active_code = code
                     active_port = port
                     active_switch_signature = current_switch_signature
                 else:
                     await service.push_status(runtime, f"Reusing existing SDU switch path for {cable_name}")
 
-                for frequency in frequencies:
+                for frequency, freq_label in frequencies:
                     if runtime.abort_requested:
                         await service.abort_runtime(runtime, "Calibration aborted by user")
                         return
@@ -183,11 +194,15 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
                     cal_sg_setpoint = 10.0 + (10.0 - sg_cal_value)
                     await cal_signal_generator.set_frequency(frequency)
                     await cal_signal_generator.set_power_level(cal_sg_setpoint)
+                    await cal_signal_generator.set_rf_on()
                     await spectrum_analyzer.set_center_frequency(frequency)
+                    sweep_time = await spectrum_analyzer.get_sweep_time()
+                    await asyncio.sleep(0.5+2 * sweep_time)
                     await spectrum_analyzer.set_peak_search(1)
-                    await asyncio.sleep(1.0)
+                    await asyncio.sleep(sweep_time)
                     measured_sa_peak = float(await spectrum_analyzer.get_marker_value_y_data(1))
-
+                    await spectrum_analyzer.set_reference_level(measured_sa_peak + 10)
+                    measured_sa_peak = float(await spectrum_analyzer.get_marker_value_y_data(1))
                     await service.push_status(
                         runtime,
                         f"{cable_name} @ {frequency} MHz: SG set={cal_sg_setpoint:.2f} dBm, SA peak={measured_sa_peak:.2f} dBm",
@@ -202,8 +217,8 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
                     await inject_signal_generator.set_frequency(inject_frequency)
                     current_inject_sg_level = estimated_sg_level
                     await inject_signal_generator.set_power_level(current_inject_sg_level)
+                    await inject_signal_generator.set_rf_on()
                     await downlink_power_meter.set_channel_frequency(inject_frequency, dl_pm_channel_number)
-
                     measured_pm = float(await downlink_power_meter.get_channel_power(dl_pm_channel_number))
                     for _ in range(10):
                         delta = desired_power_meter_level - measured_pm
@@ -211,32 +226,50 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
                             break
                         current_inject_sg_level += delta
                         await inject_signal_generator.set_power_level(current_inject_sg_level)
-                        await asyncio.sleep(0.6)
+                        await asyncio.sleep(1)
                         measured_pm = float(await downlink_power_meter.get_channel_power(dl_pm_channel_number))
 
-                    await spectrum_analyzer.set_center_frequency(frequency)
-                    await spectrum_analyzer.set_peak_search(1)
-                    await spectrum_analyzer.set_normal_marker(2)
-                    await spectrum_analyzer.set_delta_marker_on(2)
-                    await spectrum_analyzer.set_delta_marker_peak(2)
-                    await spectrum_analyzer.set_delta_marker_maximum_next(2)
+                    # Marker 1 is already on the wanted downlink carrier peak.
+                    # First try delta-marker peak directly; only do right-side peak
+                    # search if measured spacing is not close to the expected 1 MHz.
+                    await asyncio.sleep(0.5+2 * sweep_time)
+                    await spectrum_analyzer.set_delta_marker_on(1)
                     await asyncio.sleep(0.5)
+                    delta_x_hz = abs(float(await spectrum_analyzer.get_delta_marker_delta_x_value(1)))
+                    expected_delta_hz = 1_000_000.0
+                    delta_tolerance_hz = 500_000.0
+                    if abs(delta_x_hz - expected_delta_hz) > delta_tolerance_hz:
+                        await spectrum_analyzer.set_delta_marker_maximum_right(1)
+                        print("Entered----")
+                    await asyncio.sleep(0.5+2 * sweep_time)
 
-                    downlink_peak_value = float(await spectrum_analyzer.get_marker_value_y_data(1))
-                    delta_uncertainty = float(await spectrum_analyzer.get_delta_marker_delta_y_value(2))
-                    measured_value = round(downlink_peak_value - delta_uncertainty, 1)
-
+                    delta_uncertainty = float(await spectrum_analyzer.get_delta_marker_delta_y_value(1))
+                    await spectrum_analyzer.set_markers_off()
+                    await inject_signal_generator.set_rf_off()
+                    measured_value = round(measured_sa_peak - delta_uncertainty, 1)
+                    print(measured_sa_peak, delta_uncertainty, measured_value)
                     completed += 1
                     progress = 10.0 + ((completed / total_measurements) * 88.0)
                     now = datetime.now(timezone.utc)
 
+                    runtime_channel = self._build_runtime_channel(payload.channels, code, port, frequency, freq_label)
                     await service.record_measurement(
                         runtime,
-                        self._resolve_runtime_channel(payload.channels, code, port, frequency),
+                        runtime_channel,
                         frequency,
                         value=measured_value,
                         timestamp=now,
                         progress=min(progress, 98.0),
+                    )
+
+                    deps.downlink_cal_repo.upsert(
+                        cal_id=str(runtime.cal_id or "").strip(),
+                        code=code,
+                        port=port,
+                        frequency=frequency,
+                        frequency_label=freq_label,
+                        value=measured_value,
+                        date_time=now,
                     )
                     await service.push_status(
                         runtime,
@@ -270,12 +303,12 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
         channels: Iterable[Any],
         deps: CalibrationDependencies,
         include_spurious_bands: bool | None,
-    ) -> dict[tuple[str, str], list[float]]:
-        grouped: dict[tuple[str, str], set[float]] = {}
+    ) -> dict[tuple[str, str], list[tuple[float, str]]]:
+        grouped: dict[tuple[str, str], dict[float, str]] = {}
 
         for channel in channels:
-            frequencies = self._build_frequency_list(channel, deps, include_spurious_bands)
-            if len(frequencies) == 0:
+            freq_label_pairs = self._build_frequency_list(channel, deps, include_spurious_bands)
+            if len(freq_label_pairs) == 0:
                 continue
 
             codes = self._extract_codes(getattr(channel, "code", ""))
@@ -285,11 +318,13 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
 
             for code in codes:
                 key = (code, port)
-                bucket = grouped.setdefault(key, set())
-                for frequency in frequencies:
-                    bucket.add(round(float(frequency), 6))
+                bucket = grouped.setdefault(key, {})
+                for frequency, label in freq_label_pairs:
+                    f = round(float(frequency), 6)
+                    if f not in bucket:
+                        bucket[f] = label
 
-        return {key: sorted(values) for key, values in grouped.items()}
+        return {key: sorted(freq_labels.items()) for key, freq_labels in grouped.items()}
 
     def _extract_codes(self, value: Any) -> list[str]:
         text = str(value or "").strip()
@@ -305,7 +340,14 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
                 out.append(code)
         return out
 
-    def _build_prompt_channel(self, channels: Iterable[Any], code: str, port: str, frequencies: list[float]):
+    def _build_prompt_channel(
+        self,
+        channels: Iterable[Any],
+        code: str,
+        port: str,
+        frequencies: list[tuple[float, str]],
+    ):
+        target_frequency_keys = {self._frequency_key(freq) for freq, _ in frequencies}
         for channel in channels:
             channel_port = str(getattr(channel, "port", "") or "").strip()
             if port != channel_port:
@@ -318,7 +360,7 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
             frequency = self._to_float(getattr(channel, "frequency", None))
             if frequency is None:
                 continue
-            if self._frequency_key(frequency) in {self._frequency_key(f) for f in frequencies}:
+            if self._frequency_key(frequency) in target_frequency_keys:
                 return channel
 
         for channel in channels:
@@ -341,10 +383,38 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
             if self._frequency_key(channel_frequency) != self._frequency_key(frequency):
                 continue
             return channel
+        return None
 
-        for channel in channels:
-            return channel
-        raise ValueError("No channels available for recording measurement")
+    def _build_runtime_channel(
+        self,
+        channels: Iterable[Any],
+        code: str,
+        port: str,
+        frequency: float,
+        frequency_label: str,
+    ) -> CalibrationChannel:
+        """Build a stable runtime channel for live sample emission.
+
+        Do not fall back to an unrelated selected row when synthetic spurious
+        frequencies are being measured.
+        """
+        selected_label = str(frequency_label or "").strip()
+        matched = self._resolve_runtime_channel(channels, code, port, frequency)
+        if matched is not None:
+            matched_label = str(getattr(matched, "frequency_label", "") or "").strip()
+            return CalibrationChannel(
+                code=str(code or "").strip(),
+                port=str(port or "").strip(),
+                frequency_label=selected_label if selected_label != "" else matched_label,
+                frequency=str(frequency),
+            )
+
+        return CalibrationChannel(
+            code=str(code or "").strip(),
+            port=str(port or "").strip(),
+            frequency_label=selected_label,
+            frequency=str(frequency),
+        )
 
     def _frequency_key(self, value: float) -> str:
         return f"{float(value):.6f}"
@@ -442,29 +512,35 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
             total += len(self._build_frequency_list(channel, deps, include_spurious_bands))
         return max(total, 1)
 
-    def _build_frequency_list(self, channel, deps: CalibrationDependencies, include_spurious_bands: bool | None) -> list[float]:
+    def _build_frequency_list(self, channel, deps: CalibrationDependencies, include_spurious_bands: bool | None) -> list[tuple[float, str]]:
         base_frequency = self._to_float(channel.frequency)
         if base_frequency is None:
             return []
 
-        frequencies: set[float] = {base_frequency}
+        base_label = str(getattr(channel, "frequency_label", "") or "").strip()
+        freq_labels: dict[float, str] = {base_frequency: base_label}
+
         if not include_spurious_bands:
-            return sorted(frequencies)
+            return [(f, freq_labels[f]) for f in sorted(freq_labels)]
 
         spurious_row = self._get_spurious_row_for_channel(channel, deps)
 
         if spurious_row:
             for field_name in ("fbt", "fbt_hot", "fbt_cold"):
                 for offset in self._extract_offsets(spurious_row.get(field_name)):
-                    frequencies.add(round(base_frequency + offset, 6))
+                    f = round(base_frequency + offset, 6)
+                    if f not in freq_labels:
+                        freq_labels[f] = "spur_band"
 
             profile_name = str(spurious_row.get("profile_name") or "").strip()
             if profile_name:
                 for start_frequency, stop_frequency in self._get_band_ranges(profile_name, deps):
                     for frequency in self._expand_range(start_frequency, stop_frequency, 100.0):
-                        frequencies.add(round(frequency, 6))
+                        f = round(frequency, 6)
+                        if f not in freq_labels:
+                            freq_labels[f] = "spur_band"
 
-        return sorted(frequencies)
+        return [(f, freq_labels[f]) for f in sorted(freq_labels)]
 
     def _get_spurious_row_for_channel(self, channel, deps: CalibrationDependencies) -> dict[str, Any] | None:
         channel_code = str(channel.code or "").strip()

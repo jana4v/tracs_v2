@@ -137,10 +137,18 @@ class TestSystemsRepository:
                 "address_main": 1,
                 "address_redt": 1,
                 "use_redt": 1,
+                "sort_order": 1,
             },
         )
         if len(table_rows) > 0:
-            return self._normalize_rows_shape(table_rows)
+            ordered_rows = sorted(
+                table_rows,
+                key=lambda row: (
+                    int(row.get("sort_order", 10**9) or 10**9),
+                    str(row.get("instrument_name", "")).lower(),
+                ),
+            )
+            return self._normalize_rows_shape(ordered_rows)
 
         stored = self.project_instruments_collection.find_one(
             {"project": "default"},
@@ -163,7 +171,7 @@ class TestSystemsRepository:
             if doc_id and doc_id not in incoming_ids:
                 self.project_instruments_collection.delete_one({"_id": doc_id})
 
-        for row in normalized:
+        for index, row in enumerate(normalized):
             instrument_name = str(row["instrument_name"]).strip()
             payload = {
                 "_id": instrument_name,
@@ -172,6 +180,7 @@ class TestSystemsRepository:
                 "address_main": str(row.get("address_main", "")),
                 "address_redt": str(row.get("address_redt", "")),
                 "use_redt": parse_bool(row.get("use_redt", False)),
+                "sort_order": index,
             }
             self.project_instruments_collection.update_one(
                 {"_id": instrument_name},

@@ -13,8 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.InstrumentApi.factory import factory
 
 from src.routers.transmitter import router as transmitter_router
+from src.routers.receiver import router as receiver_router
 from src.routers.calibration import router as calibration_router
 from src.routers.env_data import router as env_data_router
+from src.routers.system_catalog import router as system_catalog_router
 
 
 @asynccontextmanager
@@ -24,9 +26,28 @@ async def lifespan(app: FastAPI):
     from src.config import settings
     from src.repositories.cal_sg_calibration_repo import CalSgCalibrationRepository
     from src.repositories.inject_cal_calibration_repo import InjectCalCalibrationRepository
+    from src.repositories.test_phases_repo import TestPhasesRepository
     CalSgCalibrationRepository(Database._db_path, settings.CAL_SG_CALIBRATION_TABLE)
     InjectCalCalibrationRepository(Database._db_path, settings.INJECT_CAL_CALIBRATION_TABLE)
+    TestPhasesRepository(Database._db_path, settings.TEST_PHASES_TABLE)
     Database.get_collection(settings.CONFIGURATION_COLLECTION)
+
+    # Initialize the additive system catalog schema and run a one-shot migration
+    # from the legacy transmitter JSON layout. Idempotent and non-destructive:
+    # the legacy `transmitters.modulation_details` data is left intact.
+    try:
+        from src.database.system_catalog import get_catalog_store
+        from src.database.connection import get_transmitters_collection
+        from src.repositories.system_catalog_repo import SystemCatalogRepository
+
+        catalog_repo = SystemCatalogRepository(
+            get_catalog_store(), get_transmitters_collection()
+        )
+        stats = catalog_repo.migrate_from_legacy_transmitters()
+        print(f"[system_catalog] migration stats: {stats}")
+    except Exception as exc:  # pragma: no cover - never block app startup
+        print(f"[system_catalog] migration skipped due to error: {exc!r}")
+
     yield
 
 
@@ -46,8 +67,10 @@ app.add_middleware(
 )
 
 app.include_router(transmitter_router)
+app.include_router(receiver_router)
 app.include_router(calibration_router)
 app.include_router(env_data_router)
+app.include_router(system_catalog_router)
 
 
 @app.get("/health")

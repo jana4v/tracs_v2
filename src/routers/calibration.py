@@ -24,14 +24,17 @@ from src.calibration.base import CalibrationDependencies
 from src.database.connection import Database
 from src.database.sqlite_json_store import SQLiteJsonCollection
 from src.repositories.cal_sg_calibration_repo import CalSgCalibrationRepository
+from src.repositories.downlink_cal_calibration_repo import DownlinkCalCalibrationRepository
 from src.repositories.inject_cal_calibration_repo import InjectCalCalibrationRepository
 from src.repositories.calibration_data_repo import CalibrationDataRepository
 from src.repositories.env_data_repo import EnvDataRepository
 from src.repositories.test_systems_repo import TestSystemsRepository
+from src.repositories.test_phases_repo import TestPhasesRepository
 from src.repositories.transmitter_repo import TransmitterRepository
 from src.schemas.calibration_data import (
     CalSgCompletedFrequenciesResponse,
     CalSgDataRowsResponse,
+    DownlinkCalDataRowsResponse,
     CalIdsResponse,
     CalibrationReportGenerateRequest,
     CalibrationReportGenerateResponse,
@@ -39,6 +42,7 @@ from src.schemas.calibration_data import (
     CalibrationRunPromptResponseRequest,
     CalibrationRunSnapshot,
     CalibrationRunStartRequest,
+    MeasureOptionsResponse,
 )
 from src.services.calibration_run_service import CalibrationRunService
 
@@ -76,6 +80,7 @@ def get_run_service(
             ),
             cal_sg_repo=CalSgCalibrationRepository(Database._db_path, settings.CAL_SG_CALIBRATION_TABLE),
             inject_cal_repo=InjectCalCalibrationRepository(Database._db_path, settings.INJECT_CAL_CALIBRATION_TABLE),
+            downlink_cal_repo=DownlinkCalCalibrationRepository(Database._db_path, settings.DOWNLINK_CAL_CALIBRATION_TABLE),
         )
         _run_service = CalibrationRunService(runs_collection, dependencies)
     return _run_service
@@ -91,6 +96,37 @@ def get_cal_ids(
     """
     ids = repo.get_cal_ids(cal_type=cal_type)
     return CalIdsResponse(cal_ids=ids)
+
+
+@router.get("/measure/options", response_model=MeasureOptionsResponse)
+def get_measure_options(
+    repo: CalibrationDataRepository = Depends(get_repo),
+):
+    test_phases_repo = TestPhasesRepository(Database._db_path, settings.TEST_PHASES_TABLE)
+    downlink_repo = DownlinkCalCalibrationRepository(Database._db_path, settings.DOWNLINK_CAL_CALIBRATION_TABLE)
+
+    test_phases_rows = test_phases_repo.list_rows()
+    test_phases = [str(r.get("TEST_PHASE") or "").strip() for r in test_phases_rows if str(r.get("TEST_PHASE") or "").strip() != ""]
+
+    downlink_ids = downlink_repo.list_cal_ids()
+    uplink_ids = repo.get_cal_ids(cal_type="uplink")
+    legacy_downlink_ids = repo.get_cal_ids(cal_type="downlink")
+
+    seen: set[str] = set()
+    cal_ids: list[str] = []
+    for cid in downlink_ids + uplink_ids + legacy_downlink_ids:
+        normalized = str(cid or "").strip()
+        if normalized == "" or normalized in seen:
+            continue
+        seen.add(normalized)
+        cal_ids.append(normalized)
+
+    default_cal_id = cal_ids[0] if len(cal_ids) > 0 else None
+    return MeasureOptionsResponse(
+        test_phases=test_phases,
+        cal_ids=cal_ids,
+        default_cal_id=default_cal_id,
+    )
 
 
 @router.get("/calibration/cal-sg/completed-frequencies", response_model=CalSgCompletedFrequenciesResponse)
@@ -131,6 +167,16 @@ def get_inject_cal_data(cal_id: str):
         raise HTTPException(status_code=400, detail="cal_id is required")
     rows = cal_repo.list_rows(cal_id=normalized_cal_id)
     return CalSgDataRowsResponse(cal_id=normalized_cal_id, rows=rows)
+
+
+@router.get("/calibration/downlink-cal/data", response_model=DownlinkCalDataRowsResponse)
+def get_downlink_cal_data(cal_id: str):
+    cal_repo = DownlinkCalCalibrationRepository(Database._db_path, settings.DOWNLINK_CAL_CALIBRATION_TABLE)
+    normalized_cal_id = str(cal_id or "").strip()
+    if normalized_cal_id == "":
+        raise HTTPException(status_code=400, detail="cal_id is required")
+    rows = cal_repo.list_rows(cal_id=normalized_cal_id)
+    return DownlinkCalDataRowsResponse(cal_id=normalized_cal_id, rows=rows)
 
 
 @router.post("/calibration/runs/start", response_model=CalibrationRunSnapshot)
@@ -236,10 +282,11 @@ def generate_calibration_report(payload: CalibrationReportGenerateRequest):
     repo_by_type = {
         "cal_sg": (CalSgCalibrationRepository, settings.CAL_SG_CALIBRATION_TABLE),
         "inject_cal": (InjectCalCalibrationRepository, settings.INJECT_CAL_CALIBRATION_TABLE),
+        "downlink": (DownlinkCalCalibrationRepository, settings.DOWNLINK_CAL_CALIBRATION_TABLE),
     }
     repo_config = repo_by_type.get(normalized_cal_type)
     if repo_config is None:
-        raise HTTPException(status_code=400, detail="Report generation currently supports only cal_sg and inject_cal")
+        raise HTTPException(status_code=400, detail="Report generation currently supports cal_sg, inject_cal, and downlink")
 
     cal_id = str(payload.cal_id or "").strip()
     if cal_id == "":
@@ -322,6 +369,25 @@ def generate_calibration_report(payload: CalibrationReportGenerateRequest):
                 }
                 for row in rows
             ]
+            template_spur_rows = []
+        elif normalized_cal_type == "downlink":
+            template_name = "downlink_cal_report.html"
+            title = "Downlink Calibration"
+            template_rows = []
+            template_spur_rows = []
+            for row in rows:
+                mapped = {
+                    "code": str(row.get("code", "")),
+                    "port": str(row.get("port", "")),
+                    "frequency": float(row["frequency"]),
+                    "frequency_label": str(row.get("frequency_label", "")),
+                    "value": float(row["value"]),
+                    "datetime": str(row["datetime"]),
+                }
+                if str(mapped["frequency_label"]).strip().lower() == "spur_band":
+                    template_spur_rows.append(mapped)
+                else:
+                    template_rows.append(mapped)
         else:
             template_name = "cal_sg_report.html"
             title = "Link Loss Calibration"
@@ -333,6 +399,7 @@ def generate_calibration_report(payload: CalibrationReportGenerateRequest):
                 }
                 for row in rows
             ]
+            template_spur_rows = []
 
         template = env.get_template(template_name)
         html_content = template.render(
@@ -342,6 +409,7 @@ def generate_calibration_report(payload: CalibrationReportGenerateRequest):
             generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             data_timestamp=latest_dt.strftime("%Y-%m-%d %H:%M:%S UTC"),
             rows=template_rows,
+            spur_rows=template_spur_rows,
         )
 
         temp_html_path: Path | None = None
@@ -427,31 +495,29 @@ def generate_calibration_report(payload: CalibrationReportGenerateRequest):
 
     if excel_path.exists():
         workbook = load_workbook(str(excel_path))
-        sheet = workbook.active
     else:
         workbook = Workbook()
-        sheet = workbook.active
-        sheet.title = "Calibration"
-        if normalized_cal_type == "inject_cal":
-            sheet.append(["caltype", "freq(Mhz)", "SA Loss(dB)", "DL_PM Loss(dB)", "Datetime"])
-        else:
-            sheet.append(["caltype", "freq(Mhz)", "Loss(dB)", "Datetime"])
-
-    existing_keys = set()
-    dt_col = 5 if normalized_cal_type == "inject_cal" else 4
-    for row_idx in range(2, sheet.max_row + 1):
-        freq = sheet.cell(row=row_idx, column=2).value
-        dt = sheet.cell(row=row_idx, column=dt_col).value
-        existing_keys.add((_norm_freq(freq), str(dt)))
+        workbook.remove(workbook.active)
 
     appended = 0
-    for row in rows:
-        freq_text = _norm_freq(row["frequency"])
-        dt_text = str(row["datetime"])
-        key = (freq_text, dt_text)
-        if key in existing_keys:
-            continue
-        if normalized_cal_type == "inject_cal":
+
+    if normalized_cal_type == "inject_cal":
+        sheet = workbook["Calibration"] if "Calibration" in workbook.sheetnames else workbook.create_sheet("Calibration")
+        if sheet.max_row == 1 and sheet.cell(row=1, column=1).value is None:
+            sheet.append(["caltype", "freq(Mhz)", "SA Loss(dB)", "DL_PM Loss(dB)", "Datetime"])
+
+        existing_keys = set()
+        for row_idx in range(2, sheet.max_row + 1):
+            freq = sheet.cell(row=row_idx, column=2).value
+            dt = sheet.cell(row=row_idx, column=5).value
+            existing_keys.add((_norm_freq(freq), str(dt)))
+
+        for row in rows:
+            freq_text = _norm_freq(row["frequency"])
+            dt_text = str(row["datetime"])
+            key = (freq_text, dt_text)
+            if key in existing_keys:
+                continue
             sheet.append([
                 normalized_cal_type,
                 float(row["frequency"]),
@@ -459,15 +525,97 @@ def generate_calibration_report(payload: CalibrationReportGenerateRequest):
                 float(row["dl_pm_loss"]),
                 dt_text,
             ])
-        else:
+            existing_keys.add(key)
+            appended += 1
+    elif normalized_cal_type == "downlink":
+        normal_sheet = workbook["Downlink"] if "Downlink" in workbook.sheetnames else workbook.create_sheet("Downlink")
+        spur_sheet = workbook["Downlink_SpurBand"] if "Downlink_SpurBand" in workbook.sheetnames else workbook.create_sheet("Downlink_SpurBand")
+
+        if normal_sheet.max_row == 1 and normal_sheet.cell(row=1, column=1).value is None:
+            normal_sheet.append(["caltype", "code", "port", "freq(Mhz)", "frequency_label", "value(dB)", "Datetime"])
+        if spur_sheet.max_row == 1 and spur_sheet.cell(row=1, column=1).value is None:
+            spur_sheet.append(["caltype", "code", "port", "freq(Mhz)", "frequency_label", "value(dB)", "Datetime"])
+
+        normal_keys = set()
+        for row_idx in range(2, normal_sheet.max_row + 1):
+            normal_keys.add((
+                str(normal_sheet.cell(row=row_idx, column=2).value or "").strip(),
+                str(normal_sheet.cell(row=row_idx, column=3).value or "").strip(),
+                _norm_freq(normal_sheet.cell(row=row_idx, column=4).value),
+                str(normal_sheet.cell(row=row_idx, column=5).value or "").strip().lower(),
+                str(normal_sheet.cell(row=row_idx, column=7).value),
+            ))
+
+        spur_keys = set()
+        for row_idx in range(2, spur_sheet.max_row + 1):
+            spur_keys.add((
+                str(spur_sheet.cell(row=row_idx, column=2).value or "").strip(),
+                str(spur_sheet.cell(row=row_idx, column=3).value or "").strip(),
+                _norm_freq(spur_sheet.cell(row=row_idx, column=4).value),
+                str(spur_sheet.cell(row=row_idx, column=5).value or "").strip().lower(),
+                str(spur_sheet.cell(row=row_idx, column=7).value),
+            ))
+
+        for row in rows:
+            code = str(row.get("code", "")).strip()
+            port = str(row.get("port", "")).strip()
+            frequency = float(row["frequency"])
+            frequency_label = str(row.get("frequency_label", "")).strip()
+            dt_text = str(row["datetime"])
+            key = (code, port, _norm_freq(frequency), frequency_label.lower(), dt_text)
+            target_is_spur = frequency_label.lower() == "spur_band"
+            if target_is_spur:
+                if key in spur_keys:
+                    continue
+                spur_sheet.append([
+                    normalized_cal_type,
+                    code,
+                    port,
+                    frequency,
+                    frequency_label,
+                    float(row["value"]),
+                    dt_text,
+                ])
+                spur_keys.add(key)
+            else:
+                if key in normal_keys:
+                    continue
+                normal_sheet.append([
+                    normalized_cal_type,
+                    code,
+                    port,
+                    frequency,
+                    frequency_label,
+                    float(row["value"]),
+                    dt_text,
+                ])
+                normal_keys.add(key)
+            appended += 1
+    else:
+        sheet = workbook["Calibration"] if "Calibration" in workbook.sheetnames else workbook.create_sheet("Calibration")
+        if sheet.max_row == 1 and sheet.cell(row=1, column=1).value is None:
+            sheet.append(["caltype", "freq(Mhz)", "Loss(dB)", "Datetime"])
+
+        existing_keys = set()
+        for row_idx in range(2, sheet.max_row + 1):
+            freq = sheet.cell(row=row_idx, column=2).value
+            dt = sheet.cell(row=row_idx, column=4).value
+            existing_keys.add((_norm_freq(freq), str(dt)))
+
+        for row in rows:
+            freq_text = _norm_freq(row["frequency"])
+            dt_text = str(row["datetime"])
+            key = (freq_text, dt_text)
+            if key in existing_keys:
+                continue
             sheet.append([
                 normalized_cal_type,
                 float(row["frequency"]),
                 float(row["value"]),
                 dt_text,
             ])
-        existing_keys.add(key)
-        appended += 1
+            existing_keys.add(key)
+            appended += 1
 
     workbook.save(str(excel_path))
 

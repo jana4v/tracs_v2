@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from src.repositories.cal_sg_calibration_repo import CalSgCalibrationRepository
+from src.repositories.downlink_cal_calibration_repo import DownlinkCalCalibrationRepository
 from src.repositories.inject_cal_calibration_repo import InjectCalCalibrationRepository
 from src.repositories.test_systems_repo import TestSystemsRepository
 from src.repositories.transmitter_repo import TransmitterRepository
@@ -15,6 +16,7 @@ class CalibrationDependencies:
     test_systems_repo: TestSystemsRepository
     cal_sg_repo: CalSgCalibrationRepository
     inject_cal_repo: InjectCalCalibrationRepository
+    downlink_cal_repo: DownlinkCalCalibrationRepository
 
 
 class CalibrationProcedure(ABC):

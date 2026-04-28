@@ -1,5 +1,5 @@
 from typing import Annotated, Any, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from src.schemas.enums import SystemType, ModulationType
 from src.schemas.transmitter_test_parameters import (
     CalibrationSpecRow,
@@ -29,6 +29,38 @@ class BaseModulationDetails(BaseModel):
         default=[["DF", ""], ["F1", ""], ["F2", ""]],
         description="Each inner list is [label, frequency_mhz_as_string]",
     )
+
+    @field_validator("ports", mode="before")
+    @classmethod
+    def normalize_ports(cls, value: Any) -> list[list[str]]:
+        if not isinstance(value, list):
+            return [["EV"], ["AEV"], ["GLOBAL"]]
+        normalized: list[list[str]] = []
+        for row in value:
+            if isinstance(row, list) and len(row) > 0:
+                port = "" if row[0] is None else str(row[0]).strip()
+            else:
+                port = "" if row is None else str(row).strip()
+            if port:
+                normalized.append([port])
+        return normalized or [["EV"], ["AEV"], ["GLOBAL"]]
+
+    @field_validator("frequencies", mode="before")
+    @classmethod
+    def normalize_frequencies(cls, value: Any) -> list[list[str]]:
+        if not isinstance(value, list):
+            return [["DF", ""], ["F1", ""], ["F2", ""]]
+        normalized: list[list[str]] = []
+        for row in value:
+            if isinstance(row, list):
+                label = "" if len(row) < 1 or row[0] is None else str(row[0]).strip()
+                frequency = "" if len(row) < 2 or row[1] is None else str(row[1]).strip()
+            else:
+                label = "" if row is None else str(row).strip()
+                frequency = ""
+            if label:
+                normalized.append([label, frequency])
+        return normalized or [["DF", ""], ["F1", ""], ["F2", ""]]
 
 
 class PskPmDetails(BaseModulationDetails):

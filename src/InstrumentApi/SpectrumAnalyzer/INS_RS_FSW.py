@@ -247,7 +247,9 @@ class RS_FSW(SpectrumAnalyzer):
 
     def get_delta_marker_delta_x_value(self, marker_number=1):
         self.check_limit(self.specification.markers, marker_number)
-        return float(self.command(f':CALC:DELT{marker_number}:X?', read_operation=True))
+        reference_x = float(self.command(f':CALC:MARK{marker_number}:X?', read_operation=True))
+        delta_marker_x = float(self.command(f':CALC:DELT{marker_number}:X?', read_operation=True))
+        return delta_marker_x - reference_x
 
     def get_sweep_time(self):
         return float(self.command(':SWE:TIME?', read_operation=True))

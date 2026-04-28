@@ -78,7 +78,8 @@ class SQLiteJsonCollection:
                         model TEXT NOT NULL,
                         address_main TEXT NOT NULL,
                         address_redt TEXT NOT NULL,
-                        UseRedt INTEGER NOT NULL DEFAULT 0
+                        UseRedt INTEGER NOT NULL DEFAULT 0,
+                        SortOrder INTEGER NOT NULL DEFAULT 0
                     )
                     """
                 )
@@ -337,8 +338,18 @@ class SQLiteJsonCollection:
         column_names = {str(row[1]) for row in rows}
         if "UseRedt" not in column_names:
             self._conn.execute("ALTER TABLE instruments ADD COLUMN UseRedt INTEGER NOT NULL DEFAULT 0")
+        if "SortOrder" not in column_names:
+            self._conn.execute("ALTER TABLE instruments ADD COLUMN SortOrder INTEGER NOT NULL DEFAULT 0")
+            existing_names = self._conn.execute(
+                "SELECT instrument_name FROM instruments ORDER BY instrument_name"
+            ).fetchall()
+            for index, row in enumerate(existing_names):
+                self._conn.execute(
+                    "UPDATE instruments SET SortOrder = ? WHERE instrument_name = ?",
+                    (index, str(row[0])),
+                )
 
-    def _normalize_project_instrument_row(self, row: dict[str, Any]) -> Optional[dict[str, str]]:
+    def _normalize_project_instrument_row(self, row: dict[str, Any]) -> Optional[dict[str, Any]]:
         instrument_name = str(row.get("instrument_name") or "").strip()
         if not instrument_name:
             return None
@@ -352,12 +363,19 @@ class SQLiteJsonCollection:
         else:
             use_redt = str(use_redt_value).strip().lower() in {"1", "true", "yes", "on"}
 
+        sort_order_value = row.get("sort_order", row.get("SortOrder", 0))
+        try:
+            sort_order = int(sort_order_value)
+        except (TypeError, ValueError):
+            sort_order = 0
+
         return {
             "instrument_name": instrument_name,
             "model": str(row.get("model") or "").strip(),
             "address_main": str(row.get("address_main") or "").strip(),
             "address_redt": str(row.get("address_redt") or "").strip(),
             "use_redt": use_redt,
+            "sort_order": sort_order,
         }
 
     def _upsert_project_instrument(self, row: dict[str, Any]) -> None:
@@ -366,13 +384,14 @@ class SQLiteJsonCollection:
             return
         self._conn.execute(
             """
-            INSERT INTO instruments (instrument_name, model, address_main, address_redt, UseRedt)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO instruments (instrument_name, model, address_main, address_redt, UseRedt, SortOrder)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(instrument_name) DO UPDATE SET
                 model = excluded.model,
                 address_main = excluded.address_main,
                 address_redt = excluded.address_redt,
-                UseRedt = excluded.UseRedt
+                UseRedt = excluded.UseRedt,
+                SortOrder = excluded.SortOrder
             """,
             (
                 normalized["instrument_name"],
@@ -380,6 +399,7 @@ class SQLiteJsonCollection:
                 normalized["address_main"],
                 normalized["address_redt"],
                 1 if bool(normalized["use_redt"]) else 0,
+                int(normalized["sort_order"]),
             ),
         )
 
@@ -664,7 +684,7 @@ class SQLiteJsonCollection:
                 rows = self._conn.execute("SELECT id, models FROM InstrumentModels").fetchall()
             elif self._is_project_instruments:
                 rows = self._conn.execute(
-                    "SELECT instrument_name, model, address_main, address_redt, UseRedt FROM instruments"
+                    "SELECT instrument_name, model, address_main, address_redt, UseRedt, SortOrder FROM instruments ORDER BY SortOrder ASC, instrument_name ASC"
                 ).fetchall()
             elif self._is_project_power_meters:
                 rows = self._conn.execute(
@@ -707,6 +727,7 @@ class SQLiteJsonCollection:
                         "address_main": str(row["address_main"]),
                         "address_redt": str(row["address_redt"]),
                         "use_redt": int(row["UseRedt"] or 0) != 0,
+                        "sort_order": int(row["SortOrder"] or 0),
                     }
                 )
             return docs
