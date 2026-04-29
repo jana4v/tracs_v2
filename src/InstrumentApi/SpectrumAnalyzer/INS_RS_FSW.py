@@ -322,6 +322,71 @@ class RS_FSW(SpectrumAnalyzer):
         self.command(f':DISP:TRAC{trace_number}:MODE VIEW')
         return self
 
+    def set_trace_detector_mode(self, mode: str, trace_number=1):
+        self.check_limit(self.specification.trace, trace_number)
+        detector = str(mode or "").strip().lower()
+        mode_map = {
+            # FSW user manual abbreviations: AP (AutoPeak), Av (Average), Rm (RMS)
+            "peak": "APE",
+            "average": "AVER",
+            "rms": "RMS",
+        }
+        if detector not in mode_map:
+            raise ValueError("Unsupported detector mode. Use peak, average, or rms")
+
+        target = mode_map[detector]
+        # FSW firmware variants differ in detector command tree support.
+        # Try command forms with detector keywords used in FSW documentation.
+        command_candidates = [
+            f':SENS:DET:FUNC {target}',
+            f':SENS:DET {target}',
+            f':DET:FUNC {target}',
+            f':DET {target}',
+            f':DET:TRAC{trace_number} {target}',
+        ]
+
+        query_candidates = [
+            ':SENS:DET:FUNC?',
+            ':SENS:DET?',
+            ':DET:FUNC?',
+            ':DET?',
+        ]
+
+        expected_prefixes = {
+            "APE": ("APE", "AP", "AUTO", "POS", "PK", "PEAK"),
+            "AVER": ("AVER", "AV", "AVG", "AVERAGE"),
+            "RMS": ("RMS", "RM"),
+        }[target]
+
+        last_error = None
+        for cmd in command_candidates:
+            try:
+                self.command(cmd)
+
+                # Ensure the changed detector is applied to the current acquisition.
+                try:
+                    self.command(':INIT:IMM')
+                except Exception:
+                    pass
+
+                try:
+                    for query_cmd in query_candidates:
+                        try:
+                            detector_value = str(self.command(query_cmd, read_operation=True)).strip().upper()
+                            if detector_value.startswith(expected_prefixes):
+                                return self
+                        except Exception:
+                            continue
+                    continue
+                except Exception:
+                    # Query may be unavailable on some firmware; a successful set is enough.
+                    return self
+            except Exception as exc:
+                last_error = exc
+                continue
+
+        raise RuntimeError(f"Unable to set detector mode on FSW to {detector}") from last_error
+
     def set_vbw_to_rbw_ratio(self, ratio):
         self.check_limit(self.specification.vbw_to_rbw_ratio, ratio)
         self.command(f':BAND:VID:RAT {ratio}')
@@ -444,7 +509,7 @@ class RS_FSW(SpectrumAnalyzer):
 
     def get_trace_data(self, trace_number=1):
         self.check_limit(self.specification.trace, trace_number)
-        raw = self.command(f':TRAC? TRACE{trace_number}', read_operation=True)
+        raw = self.command(f':TRAC? TRACE{trace_number}', read_operation=True, buffer_length=20000)
         return [float(v) for v in raw.split(',')]
 
     def set_displayline_state_on_off(self, on_or_off):

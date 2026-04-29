@@ -27,6 +27,8 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
                 await service.abort_runtime(runtime, "No valid frequencies found for Downlink calibration")
                 return
 
+            cal_sg_level = float(getattr(payload, "cal_sg_level", 10.0) or 10.0)
+
             required_frequency_keys = {
                 self._frequency_key(freq)
                 for frequencies in grouped.values()
@@ -191,7 +193,7 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
                     inject_sa_loss = float(inject_loss["sa_loss"])
                     inject_pm_loss = float(inject_loss["dl_pm_loss"])
 
-                    cal_sg_setpoint = 10.0 + (10.0 - sg_cal_value)
+                    cal_sg_setpoint = cal_sg_level + (cal_sg_level - sg_cal_value)
                     await cal_signal_generator.set_frequency(frequency)
                     await cal_signal_generator.set_power_level(cal_sg_setpoint)
                     await cal_signal_generator.set_rf_on()
@@ -229,25 +231,31 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
                         await asyncio.sleep(1)
                         measured_pm = float(await downlink_power_meter.get_channel_power(dl_pm_channel_number))
 
-                    # Marker 1 is already on the wanted downlink carrier peak.
-                    # First try delta-marker peak directly; only do right-side peak
-                    # search if measured spacing is not close to the expected 1 MHz.
-                    await asyncio.sleep(0.5+2 * sweep_time)
-                    await spectrum_analyzer.set_delta_marker_on(1)
-                    await asyncio.sleep(0.5)
-                    delta_x_hz = abs(float(await spectrum_analyzer.get_delta_marker_delta_x_value(1)))
-                    expected_delta_hz = 1_000_000.0
-                    delta_tolerance_hz = 500_000.0
-                    if abs(delta_x_hz - expected_delta_hz) > delta_tolerance_hz:
-                        await spectrum_analyzer.set_delta_marker_maximum_right(1)
-                        print("Entered----")
-                    await asyncio.sleep(0.5+2 * sweep_time)
+                    # Read injected-carrier peak directly and compute uncertainty
+                    # as expected injected level minus measured injected peak.
+                    #await spectrum_analyzer.set_center_frequency(inject_frequency)
+                    await asyncio.sleep(0.5 + (2 * sweep_time))
+                    await spectrum_analyzer.set_peak_search(1)
+                    await asyncio.sleep(sweep_time)
+                    expected_inject_freq_hz = inject_frequency * 1_000_000.0
+                    freq_tolerance_hz = 200_000.0
+                    marker_freq_hz = float(await spectrum_analyzer.get_marker_value_x_data(1))
+                    for _ in range(20):
+                        if abs(marker_freq_hz - expected_inject_freq_hz) <= freq_tolerance_hz:
+                            break
+                        if marker_freq_hz < expected_inject_freq_hz:
+                            await spectrum_analyzer.set_marker_find_next_right_peak(1)
+                        else:
+                            await spectrum_analyzer.set_marker_find_next_left_peak(1)
+                        await asyncio.sleep(max(0.1, sweep_time))
+                        marker_freq_hz = float(await spectrum_analyzer.get_marker_value_x_data(1))
 
-                    delta_uncertainty = float(await spectrum_analyzer.get_delta_marker_delta_y_value(1))
+                    measured_inject_peak = float(await spectrum_analyzer.get_marker_value_y_data(1))
+                    expected_value = measured_sa_peak
+                    uncertainty = expected_value - measured_inject_peak
                     await spectrum_analyzer.set_markers_off()
                     await inject_signal_generator.set_rf_off()
-                    measured_value = round(measured_sa_peak - delta_uncertainty, 1)
-                    print(measured_sa_peak, delta_uncertainty, measured_value)
+                    measured_value = round(measured_sa_peak - uncertainty-cal_sg_level, 1) 
                     completed += 1
                     progress = 10.0 + ((completed / total_measurements) * 88.0)
                     now = datetime.now(timezone.utc)
@@ -276,7 +284,7 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
                         (
                             f"Downlink cal @ {frequency} MHz ({cable_name}): desired PM={desired_power_meter_level:.2f} dBm, "
                             f"measured PM={measured_pm:.2f} dBm, inject SG={current_inject_sg_level:.2f} dBm, "
-                            f"delta={delta_uncertainty:.2f} dB, value={measured_value:.1f} dBm"
+                            f"inject uncertainty={uncertainty:.2f} dB, value={measured_value:.1f} dBm"
                         ),
                     )
 

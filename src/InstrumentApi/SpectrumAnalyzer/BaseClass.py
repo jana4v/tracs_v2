@@ -1,5 +1,7 @@
 from abc import ABC,abstractmethod
-from typing import Optional
+import math
+import time
+from typing import Literal, Optional
 from ..InstrumentBaseClass import InstrumentBaseClass
 from ..Models import Limits,InterfaceProtocols
 from pydantic import BaseModel
@@ -269,6 +271,10 @@ class SpectrumAnalyzer(ABC, InstrumentBaseClass):
         pass
 
     @abstractmethod
+    def set_trace_detector_mode(self, mode: str, trace_number=1):
+        pass
+
+    @abstractmethod
     def set_vbw_to_rbw_ratio(self, ratio):
         pass
 
@@ -443,3 +449,53 @@ class SpectrumAnalyzer(ABC, InstrumentBaseClass):
     @abstractmethod
     def is_carrier_presence_at_frequency(self, frequency):
         pass
+
+    def measure_channel_power(
+        self,
+        center_frequency_mhz: float,
+        channel_bandwidth_mhz: float = 1.0,
+        trace_number: int = 1,
+        detector_mode: Literal["peak", "average", "rms"] = "average",
+    ) -> float:
+        if channel_bandwidth_mhz <= 0.0:
+            raise ValueError("channel_bandwidth_mhz must be > 0")
+
+        # Average detector is used by default to stabilize trace-power integration.
+        self.set_trace_detector_mode(detector_mode, trace_number)
+        sweep_time = float(self.get_sweep_time())
+        time.sleep(0.5+5*sweep_time)  # Allow trace to update with new detector mode
+        trace_data = self.get_trace_data(trace_number)
+        if not isinstance(trace_data, list) or len(trace_data) < 3:
+            raise ValueError("Unable to read valid trace data for channel power measurement")
+
+        span_raw = float(self.get_span())
+        rbw_raw = float(self.get_resolution_bandwidth())
+
+        span_hz = span_raw if span_raw > 100_000 else (span_raw * 1_000_000.0)
+        rbw_hz = rbw_raw if rbw_raw > 1_000 else (rbw_raw * 1_000.0)
+        if rbw_hz <= 0.0:
+            raise ValueError("Invalid RBW while computing channel power")
+
+        points = len(trace_data)
+        bin_bw_hz = span_hz / float(points - 1)
+        center_hz = center_frequency_mhz * 1_000_000.0
+        start_freq_hz = center_hz - (span_hz / 2.0)
+
+        half_bw_hz = (channel_bandwidth_mhz * 1_000_000.0) / 2.0
+        lower_hz = center_hz - half_bw_hz
+        upper_hz = center_hz + half_bw_hz
+
+        first_idx = max(0, int(math.ceil((lower_hz - start_freq_hz) / bin_bw_hz)))
+        last_idx = min(points - 1, int(math.floor((upper_hz - start_freq_hz) / bin_bw_hz)))
+        if first_idx > last_idx:
+            raise ValueError("Computed channel power is invalid (no bins found in channel window)")
+
+        linear_sum_mw = 0.0
+        for idx in range(first_idx, last_idx + 1):
+            power_in_rbw_mw = 10 ** (float(trace_data[idx]) / 10.0)
+            linear_sum_mw += power_in_rbw_mw * (bin_bw_hz / rbw_hz)
+
+        if linear_sum_mw <= 0.0:
+            raise ValueError("Computed channel power is invalid (no bins found in channel window)")
+
+        return 10.0 * math.log10(linear_sum_mw)

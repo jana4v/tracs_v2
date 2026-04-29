@@ -42,12 +42,16 @@ from src.schemas.calibration_data import (
     CalibrationRunPromptResponseRequest,
     CalibrationRunSnapshot,
     CalibrationRunStartRequest,
+    MeasureRunStartRequest,
+    MeasureRunStartResponse,
     MeasureOptionsResponse,
 )
 from src.services.calibration_run_service import CalibrationRunService
+from src.measurements import MeasureRunService
 
 router = APIRouter(prefix="/api/v2", tags=["Calibration Data"])
 _run_service: Optional[CalibrationRunService] = None
+_measure_service: Optional[MeasureRunService] = None
 
 
 def get_repo(
@@ -56,7 +60,7 @@ def get_repo(
     return CalibrationDataRepository(collection)
 
 
-def get_run_service(
+def get_calibration_dependencies(
     runs_collection: SQLiteJsonCollection = Depends(get_calibration_runs_collection),
     transmitters_collection: SQLiteJsonCollection = Depends(get_transmitters_collection),
     tsm_paths_collection: SQLiteJsonCollection = Depends(get_project_tsm_paths_collection),
@@ -65,25 +69,39 @@ def get_run_service(
     project_instruments_collection: SQLiteJsonCollection = Depends(get_project_instruments_collection),
     project_power_meters_collection: SQLiteJsonCollection = Depends(get_project_power_meters_collection),
     configuration_collection: SQLiteJsonCollection = Depends(get_configuration_collection),
+) -> CalibrationDependencies:
+    _ = runs_collection
+    return CalibrationDependencies(
+        transmitter_repo=TransmitterRepository(transmitters_collection, tsm_paths_collection, misc_collection),
+        test_systems_repo=TestSystemsRepository(
+            transmitters_collection=transmitters_collection,
+            instruments_collection=instruments_collection,
+            project_instruments_collection=project_instruments_collection,
+            project_power_meters_collection=project_power_meters_collection,
+            project_tsm_paths_collection=tsm_paths_collection,
+            configuration_collection=configuration_collection,
+        ),
+        cal_sg_repo=CalSgCalibrationRepository(Database._db_path, settings.CAL_SG_CALIBRATION_TABLE),
+        inject_cal_repo=InjectCalCalibrationRepository(Database._db_path, settings.INJECT_CAL_CALIBRATION_TABLE),
+        downlink_cal_repo=DownlinkCalCalibrationRepository(Database._db_path, settings.DOWNLINK_CAL_CALIBRATION_TABLE),
+    )
+
+
+def get_run_service(
+    runs_collection: SQLiteJsonCollection = Depends(get_calibration_runs_collection),
+    dependencies: CalibrationDependencies = Depends(get_calibration_dependencies),
 ) -> CalibrationRunService:
     global _run_service
     if _run_service is None:
-        dependencies = CalibrationDependencies(
-            transmitter_repo=TransmitterRepository(transmitters_collection, tsm_paths_collection, misc_collection),
-            test_systems_repo=TestSystemsRepository(
-                transmitters_collection=transmitters_collection,
-                instruments_collection=instruments_collection,
-                project_instruments_collection=project_instruments_collection,
-                project_power_meters_collection=project_power_meters_collection,
-                project_tsm_paths_collection=tsm_paths_collection,
-                configuration_collection=configuration_collection,
-            ),
-            cal_sg_repo=CalSgCalibrationRepository(Database._db_path, settings.CAL_SG_CALIBRATION_TABLE),
-            inject_cal_repo=InjectCalCalibrationRepository(Database._db_path, settings.INJECT_CAL_CALIBRATION_TABLE),
-            downlink_cal_repo=DownlinkCalCalibrationRepository(Database._db_path, settings.DOWNLINK_CAL_CALIBRATION_TABLE),
-        )
         _run_service = CalibrationRunService(runs_collection, dependencies)
     return _run_service
+
+
+def get_measure_service() -> MeasureRunService:
+    global _measure_service
+    if _measure_service is None:
+        _measure_service = MeasureRunService()
+    return _measure_service
 
 
 @router.get("/calibration/cal-ids", response_model=CalIdsResponse)
@@ -127,6 +145,18 @@ def get_measure_options(
         cal_ids=cal_ids,
         default_cal_id=default_cal_id,
     )
+
+
+@router.post("/measure/runs/start", response_model=MeasureRunStartResponse)
+async def start_measure_run(
+    payload: MeasureRunStartRequest,
+    service: MeasureRunService = Depends(get_measure_service),
+    dependencies: CalibrationDependencies = Depends(get_calibration_dependencies),
+):
+    try:
+        return await service.start_run(payload, dependencies)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/calibration/cal-sg/completed-frequencies", response_model=CalSgCompletedFrequenciesResponse)

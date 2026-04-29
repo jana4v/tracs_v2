@@ -367,6 +367,20 @@ class AG_N9030A(SpectrumAnalyzer):
         self.command(code)
         return self
 
+    def set_trace_detector_mode(self, mode: str, trace_number=1):
+        self.check_limit(self.specification.trace, trace_number)
+        detector = str(mode or "").strip().lower()
+        mode_map = {
+            "peak": "POS",
+            "average": "AVER",
+            "rms": "RMS",
+        }
+        if detector not in mode_map:
+            raise ValueError("Unsupported detector mode. Use peak, average, or rms")
+        code = f':DETector:TRACe{trace_number} {mode_map[detector]}'
+        self.command(code)
+        return self
+
     def set_vbw_to_rbw_ratio(self, ratio):
         self.check_limit(self.specification.vbw_to_rbw_ratio, ratio)
         code = f':SENSe:BANDwidth:VIDeo:RATio {ratio}'
@@ -494,7 +508,7 @@ class AG_N9030A(SpectrumAnalyzer):
     def get_trace_data(self, trace_number=1):
         self.check_limit(self.specification.trace, trace_number)
         code = f':TRAC? TRACE{trace_number}'
-        result = self.command(code, read_operation=True, read_buffer_length=20000)
+        result = self.command(code, read_operation=True, buffer_length=20000)
         result = result.split(',')
         trace_data = [float(i) for i in result]
         return trace_data

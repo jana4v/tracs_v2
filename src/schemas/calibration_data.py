@@ -64,6 +64,7 @@ class CalibrationRunStartRequest(BaseModel):
     cal_id: str
     cal_type: str
     include_spurious_bands: bool | None = None
+    cal_sg_level: float = 10.0
     channels: List[CalibrationChannel]
 
 
@@ -126,3 +127,60 @@ class MeasureOptionsResponse(BaseModel):
     test_phases: List[str]
     cal_ids: List[str]
     default_cal_id: str | None = None
+
+
+class MeasureTableRow(BaseModel):
+    code: str
+    port: str
+    frequency_label: str
+    frequency: str
+    power_selected: bool = False
+    frequency_selected: bool = False
+    modulation_index_selected: bool = False
+    spurious_selected: bool = False
+
+
+class MeasureRunStartRequest(BaseModel):
+    test_phase: str
+    sub_test_phase: str
+    cal_id: str
+    test_plan_type: str
+    execution_mode: str
+    remarks: str | None = None
+    continue_on_missing_downlink_cal: bool = False
+    transmitter_rows: List[MeasureTableRow] = Field(default_factory=list)
+    receiver_rows: List[MeasureTableRow] = Field(default_factory=list)
+    transponder_rows: List[MeasureTableRow] = Field(default_factory=list)
+
+
+class MeasureMissingChannel(BaseModel):
+    system_kind: Literal["transmitter", "receiver", "transponder"]
+    code: str
+    port: str
+    frequency_label: str
+    frequency: float
+    parameter: str
+
+
+class MeasureRunResultRow(BaseModel):
+    system_kind: Literal["transmitter", "receiver", "transponder"]
+    code: str
+    port: str
+    frequency_label: str
+    frequency: float
+    parameter: str
+    measured_value: float
+    applied_loss: float
+    final_value: float
+    status: str
+    message: str
+    timestamp: datetime
+
+
+class MeasureRunStartResponse(BaseModel):
+    message: str
+    processed_rows: int
+    requires_confirmation: bool = False
+    missing_downlink_channels: List[MeasureMissingChannel] = Field(default_factory=list)
+    requested_parameters: List[str] = Field(default_factory=list)
+    results: List[MeasureRunResultRow] = Field(default_factory=list)
