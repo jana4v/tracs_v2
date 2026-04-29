@@ -1,9 +1,6 @@
-from ipaddress import IPv4Address
-#from .SignalGenerator.BaseClass import SignalGenerator
-#from .PowerMeter.BaseClass import PowerMeter
-#from .SpectrumAnalyzer.BaseClass import SpectrumAnalyzer
 from pydantic import BaseModel
 from enum import Enum
+from typing import Union
 
 class InstrumentTypes(str, Enum):
     SignalGenerator = "SG"
@@ -45,7 +42,22 @@ class InterfaceProtocols(Enum):
 
 
 class InstrumentAddress(BaseModel):
-    ip_or_gpib_address: str | int 
+    ip_or_gpib_address: str | int
     port_or_gpib_bus: int
     def __init__(self, ip_or_gpib_address, port_or_gpib_bus, **kwargs):
         super().__init__(ip_or_gpib_address=ip_or_gpib_address, port_or_gpib_bus=port_or_gpib_bus, **kwargs)
+
+
+class GpibAddress(BaseModel):
+    """Typed GPIB address — primary address on a specific bus board."""
+    address: int
+    bus: int = 0
+
+
+class LanAddress(BaseModel):
+    """Typed LAN address — IP or hostname with optional port."""
+    host: str
+    port: int = 0
+
+
+InstrumentAddressV2 = Union[GpibAddress, LanAddress]

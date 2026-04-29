@@ -32,6 +32,13 @@ class Specification(BaseModel):
 
 
 class SpectrumAnalyzer(ABC, InstrumentBaseClass):
+    def __init_subclass__(cls, model_key: str = "", **kwargs):
+        super().__init_subclass__(**kwargs)
+        if model_key:
+            from ..factory import factory
+            from ..Models import InstrumentTypes
+            factory.register_component(InstrumentTypes.SpectrumAnalyzer, model_key, cls)
+
     def __init__(self):
         super().__init__()
         self.supported_protocol = InterfaceProtocols.ANY.value

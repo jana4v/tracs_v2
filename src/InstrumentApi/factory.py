@@ -1,5 +1,9 @@
-import os, importlib
+import logging
+import os
+import importlib
 from .Models import InstrumentAddress
+
+logger = logging.getLogger(__name__)
 
 
 class Factory:
@@ -11,16 +15,15 @@ class Factory:
             self._creators[type][model] = class_ref
         else:
             self._creators[type] = {model: class_ref}
-        print(f"""Instrument type:{type} with Model Number:{model} got Registered.""")
+        logger.debug(f"Instrument type:{type} with Model Number:{model} got Registered.")
 
     def get_component(self, type, model):
-        #print(f"Getting component Command Format:{command_format}")
         try:
             type = self._creators.get(type)
             if type:
                 return type.get(model)
             return None
-        except AttributeError as ae:
+        except AttributeError:
             return None
 
 
@@ -41,11 +44,10 @@ for root, sub_folders, files in os.walk(destination_dir):
             else:
                 package_name = ".".join([root_package] + relative_path.split(os.sep))
 
-            #print(f"Importing module {module_name} from package {package_name}")
             try:
                 importlib.import_module(f".{module_name}", package=package_name)
             except ModuleNotFoundError as e:
-                print(f"Error importing module {module_name} from package {package_name}: {e}")
+                logger.warning(f"Error importing module {module_name} from package {package_name}: {e}")
 
 
 def get_instrument(instrument_type, model_number, address: InstrumentAddress):

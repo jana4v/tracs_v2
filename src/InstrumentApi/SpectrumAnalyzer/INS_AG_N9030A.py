@@ -1,5 +1,5 @@
 
-import logging,time
+import time
 from ..factory import factory
 from .BaseClass import SpectrumAnalyzer,Specification
 from ..Models import InstrumentTypes,Limits,Units
@@ -388,12 +388,12 @@ class AG_N9030A(SpectrumAnalyzer):
         code = ':DISPlay:WINDow:TRACe:Y:PDIVision?'
         return self.command(code, read_operation=True)
 
-    def set_trace_peak_sort_by_amplitude(self):
+    def set_trace_peak_sort_by_amplitude_of_trace1_data(self):
         code = ':TRACe:MATH:PEAK:SORT AMPLitude'
         self.command(code)
         return self
 
-    def set_trace_peak_sort_by_frequency(self):
+    def set_trace_peak_sort_by_frequency_of_trace1_data(self):
         code = ':TRACe:MATH:PEAK:SORT FREQuency'
         self.command(code)
         return self
@@ -476,13 +476,13 @@ class AG_N9030A(SpectrumAnalyzer):
         code = f':TRACe:MATH:MEAN? TRACE{trace_number}'
         return float(self.command(code, read_operation=True))
 
-    def get_number_of_signal_peaks_found_on_trace_1(self):
+    def get_number_of_signal_peaks_found_on_trace1(self):
         code = ':TRACe:MATH:PEAK:POINts?'
         return float(self.command(code, read_operation=True))
 
-    def get_signal_peaks_data_of_trace_1(self, sort_by_amplitudes=True):
+    def get_signal_peaks_data_of_trace1(self, sort_by_amplitudes=True):
         if not sort_by_amplitudes:
-            self.set_trace_peak_sort_by_frequency()
+            self.set_trace_peak_sort_by_frequency_of_trace1_data()
         code_to_check_points = ':TRACe:MATH:PEAK:POIN?'
         no_of_points = int(self.command(code_to_check_points, read_operation=True))
         if no_of_points != 0:
@@ -499,22 +499,22 @@ class AG_N9030A(SpectrumAnalyzer):
         trace_data = [float(i) for i in result]
         return trace_data
 
-    def set_display_line_state_on_off(self, on_or_off):
+    def set_displayline_state_on_off(self, on_or_off):
         code = f':DISPlay:WINDow:TRACe:Y:DLINe:STATe {on_or_off}'
         self.command(code)
         return self
 
-    def get_display_line_state(self):
+    def get_displayline_state(self):
         code = ':DISPlay:WINDow:TRACe:Y:DLINe:STATe?'
         return self.command(code, read_operation=True)
 
-    def set_display_line_position(self, amplitude):
+    def set_displayline_position(self, amplitude):
         self.check_limit(self.specification.display_line_position, amplitude)
         code = f':DISPlay:WINDow:TRACe:Y:DLINe {amplitude}'
         self.command(code)
         return self
 
-    def get_display_line_position(self):
+    def get_displayline_position(self):
         code = ':DISPlay:WINDow:TRACe:Y:DLINe?'
         return self.command(code, read_operation=True)
 
@@ -584,7 +584,7 @@ class AG_N9030A(SpectrumAnalyzer):
         self.command(code)
         return self
 
-    def set_wait_until_complete_current_action(self):
+    def set_wait_until_to_complete_current_action(self):
         code = '*WAI'
         self.command(code)
         return self
@@ -593,7 +593,7 @@ class AG_N9030A(SpectrumAnalyzer):
         file_name = file_name + '.png'
         code = ":DISP:MENU:STAT OFF; :MMEM:DEL 'C:\\TEMP\\SASCRN.PNG'; :MMEM:STOR:SCR 'C:\\TEMP\\SASCRN.PNG'"
         self.command(code)
-        self.set_wait_until_complete_current_action()
+        self.set_wait_until_to_complete_current_action()
         code = "MMEM:DATA? 'C:\\TEMP\\SASCRN.PNG'"
         file_size_digit_length = self.command(code, True, 2)
         file_size = self.command('', True, int(file_size_digit_length[1:]))
@@ -605,34 +605,11 @@ class AG_N9030A(SpectrumAnalyzer):
         lock_status = self.command(code, read_operation=True)
         return int(lock_status) == 0
 
-    def get_displayline_position(self):
-        raise NotImplementedError
-
-    def get_number_of_signal_peaks_found_on_trace1(self):
-        raise NotImplementedError
-
-    def get_signal_peaks_data_of_trace1(self, sort_by_amplitudes=True):
-        raise NotImplementedError
-
     def is_carrier_presence_at_frequency(self, frequency):
-        raise NotImplementedError
+        from ..exceptions import DriverNotImplementedError
+        raise DriverNotImplementedError(
+            "is_carrier_presence_at_frequency is not implemented for N9030A"
+        )
 
-    def set_displayline_position(self, amplitude):
-        raise NotImplementedError
 
-    def set_displayline_state_on_off(self, on_or_off):
-        raise NotImplementedError
-
-    def set_trace_peak_sort_by_amplitude_of_trace1_data(self):
-        raise NotImplementedError
-
-    def set_trace_peak_sort_by_frequency_of_trace1_data(self):
-        raise NotImplementedError
-
-    def set_wait_until_to_complete_current_action(self):
-        raise NotImplementedError
-
-    def get_displayline_state(self):
-        raise NotImplementedError
-
-factory.register_component(InstrumentTypes.SpectrumAnalyzer,"N9030A",AG_N9030A)
+factory.register_component(InstrumentTypes.SpectrumAnalyzer, "N9030A", AG_N9030A)

@@ -4,22 +4,27 @@ from .Protocol.remote import remote_command, RemoteRequest, remote_config
 import asyncio
 import functools
 import inspect
+import logging
 import re
 import pyvisa
 import sqlite3
+import threading
 import time
 from pathlib import Path
 
 from src.config import settings
 
+logger = logging.getLogger(__name__)
 
+_LOW_LEVEL_GPIB_LOCK = threading.Lock()
 _LOW_LEVEL_GPIB_CACHE = {"ts": 0.0, "enabled": False}
 
 
 def _is_low_level_gpib_enabled() -> bool:
     now = time.monotonic()
-    if now - float(_LOW_LEVEL_GPIB_CACHE["ts"]) < 2.0:
-        return bool(_LOW_LEVEL_GPIB_CACHE["enabled"])
+    with _LOW_LEVEL_GPIB_LOCK:
+        if now - float(_LOW_LEVEL_GPIB_CACHE["ts"]) < 2.0:
+            return bool(_LOW_LEVEL_GPIB_CACHE["enabled"])
 
     db_path = Path(__file__).resolve().parents[2] / settings.SQLITE_DB_PATH
     enabled = False
@@ -38,8 +43,9 @@ def _is_low_level_gpib_enabled() -> bool:
     except Exception:
         enabled = False
 
-    _LOW_LEVEL_GPIB_CACHE["ts"] = now
-    _LOW_LEVEL_GPIB_CACHE["enabled"] = enabled
+    with _LOW_LEVEL_GPIB_LOCK:
+        _LOW_LEVEL_GPIB_CACHE["ts"] = now
+        _LOW_LEVEL_GPIB_CACHE["enabled"] = enabled
     return enabled
 
 
@@ -56,6 +62,45 @@ class InstrumentBaseClass:
             self.ins_ref.close()
         except:
             pass
+
+    def connect(self):
+        """Open the VISA resource explicitly. Can also be used as a context manager."""
+        if self.rm is None:
+            try:
+                self.rm = pyvisa.ResourceManager("@ni")
+            except Exception:
+                self.rm = pyvisa.ResourceManager()
+        if self.ins_ref is None:
+            if self.is_lan_based_instrument():
+                self.ins_ref = self.rm.open_resource(
+                    f'TCPIP0::{self.address.ip_or_gpib_address}::inst0::INSTR'
+                )
+            else:
+                self.ins_ref = self.rm.open_resource(
+                    f'GPIB{self.address.port_or_gpib_bus}::{self.address.ip_or_gpib_address}::INSTR'
+                )
+
+    def disconnect(self):
+        """Close the VISA resource and reset connection state."""
+        if self.ins_ref is not None:
+            try:
+                self.ins_ref.close()
+            except Exception:
+                pass
+            self.ins_ref = None
+        if self.rm is not None:
+            try:
+                self.rm.close()
+            except Exception:
+                pass
+            self.rm = None
+
+    def __enter__(self):
+        self.connect()
+        return self
+
+    def __exit__(self, *_):
+        self.disconnect()
 
     def is_lan_based_instrument(self):
         addr = self.address.ip_or_gpib_address
@@ -148,9 +193,10 @@ class InstrumentBaseClass:
         req.release_all_devices = release_all_devices
         return gpib_command(req)
 
-    def check_limit(self, limits: Limits, value: float):
-        if not (value <= limits.upper_limit and value >= limits.lower_limit):
-            raise Exception("Limit Failed ...")
+    def check_limit(self, limits: Limits, value: float, param_name: str = "value"):
+        if not (limits.lower_limit <= value <= limits.upper_limit):
+            from .exceptions import LimitViolationError
+            raise LimitViolationError(param_name, value, limits.lower_limit, limits.upper_limit)
 
 
 import traceback
@@ -162,10 +208,9 @@ def catch_exceptions_and_traceback(method):
             return method(*args, **kwargs)
         except Exception as e:
             tb = traceback.extract_tb(e.__traceback__)  # Extract the traceback details
-            print(f"Exception in {method.__name__}: {e}")
-            print("Traceback details:")
+            logger.error(f"Exception in {method.__name__}: {e}")
             for frame in tb:
-                print(f"File: {frame.filename}, Line: {frame.lineno}, Function: {frame.name}, Code: {frame.line}")
+                logger.error(f"File: {frame.filename}, Line: {frame.lineno}, Function: {frame.name}, Code: {frame.line}")
             raise  # Optionally re-raise the exception if you want to propagate it
 
     return wrapper

@@ -1,7 +1,7 @@
 from abc import ABC,abstractmethod
 from typing import Optional
 from ..InstrumentBaseClass import InstrumentBaseClass
-from ..Models import Limits
+from ..Models import Limits, InterfaceProtocols
 from pydantic import BaseModel
 
 
@@ -15,9 +15,19 @@ class Specification(BaseModel):
     FM_deviation:Limits|None = None
     
 
-class TtcTransmitter(ABC,InstrumentBaseClass):
+class TtcTransmitter(ABC, InstrumentBaseClass):
+    def __init_subclass__(cls, model_key: str = "", **kwargs):
+        super().__init_subclass__(**kwargs)
+        if model_key:
+            from ..factory import factory
+            from ..Models import InstrumentTypes
+            factory.register_component(InstrumentTypes.TtcTransmitter, model_key, cls)
 
-    @abstractmethod    
+    def __init__(self):
+        super().__init__()
+        self.supported_protocol = InterfaceProtocols.ANY.value
+
+    @abstractmethod
     def preset_instrument(self):
         pass
 

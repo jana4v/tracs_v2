@@ -1,6 +1,7 @@
 
 from .factory import get_instrument, factory
-from .Models import InstrumentAddress, InstrumentTypes
+from .Models import InstrumentAddress, InstrumentTypes, GpibAddress, LanAddress, InstrumentAddressV2
+from .exceptions import InstrumentError, CommunicationError, LimitViolationError, DriverNotImplementedError, ConfigurationError
 from .SignalGenerator.BaseClass import SignalGenerator
 from .SpectrumAnalyzer.BaseClass import SpectrumAnalyzer
 from .PowerMeter.BaseClass import PowerMeter
