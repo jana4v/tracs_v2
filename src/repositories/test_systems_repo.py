@@ -20,6 +20,7 @@ class TestSystemsRepository:
         project_instruments_collection: SQLiteJsonCollection,
         project_power_meters_collection: SQLiteJsonCollection,
         project_tsm_paths_collection: SQLiteJsonCollection,
+        project_transponders_collection: SQLiteJsonCollection,
         configuration_collection: SQLiteJsonCollection,
     ):
         self.transmitters_collection = transmitters_collection
@@ -27,6 +28,7 @@ class TestSystemsRepository:
         self.project_instruments_collection = project_instruments_collection
         self.project_power_meters_collection = project_power_meters_collection
         self.project_tsm_paths_collection = project_tsm_paths_collection
+        self.project_transponders_collection = project_transponders_collection
         self.configuration_collection = configuration_collection
 
     def get_instrument_catalog(self) -> dict[str, list[str]]:
@@ -483,6 +485,98 @@ class TestSystemsRepository:
     def save_project_tsm_path_rows(self, rows: list[dict[str, Any]]) -> int:
         merged_rows = self._sync_tsm_path_rows(overrides=rows)
         return len(merged_rows)
+
+    def _normalize_transponder_rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+
+            name = str(row.get("name", row.get("Name", ""))).strip()
+            code = str(row.get("code", row.get("Code", ""))).strip()
+            if not name and not code:
+                continue
+
+            out.append(
+                {
+                    "name": name,
+                    "code": code,
+                    "rx_code": str(row.get("rx_code", row.get("RxCode", ""))).strip(),
+                    "rx_port": str(row.get("rx_port", row.get("RxPort", ""))).strip(),
+                    "rx_freq": str(row.get("rx_freq", row.get("RxFreq", ""))).strip(),
+                    "tx_code": str(row.get("tx_code", row.get("TxCode", ""))).strip(),
+                    "tx_port": str(row.get("tx_port", row.get("TxPort", ""))).strip(),
+                    "tx_freq": str(row.get("tx_freq", row.get("TxFreq", ""))).strip(),
+                }
+            )
+
+        return out
+
+    def get_project_transponder_rows(self) -> list[dict[str, Any]]:
+        table_rows = self.project_transponders_collection.find(
+            {},
+            {
+                "_id": 0,
+                "Name": 1,
+                "Code": 1,
+                "RxCode": 1,
+                "RxPort": 1,
+                "RxFreq": 1,
+                "TxCode": 1,
+                "TxPort": 1,
+                "TxFreq": 1,
+                "sort_order": 1,
+            },
+        )
+        if len(table_rows) == 0:
+            return []
+
+        ordered = sorted(
+            table_rows,
+            key=lambda row: (
+                int(row.get("sort_order", 10**9) or 10**9),
+                str(row.get("Name", "")).lower(),
+                str(row.get("Code", "")).lower(),
+            ),
+        )
+        return self._normalize_transponder_rows(ordered)
+
+    def save_project_transponder_rows(self, rows: list[dict[str, Any]]) -> int:
+        normalized = self._normalize_transponder_rows(rows)
+
+        incoming_ids = {
+            f"{str(r.get('name', '')).strip()}|{str(r.get('code', '')).strip()}"
+            for r in normalized
+        }
+        existing = self.project_transponders_collection.find({}, {"_id": 1})
+        for doc in existing:
+            doc_id = str(doc.get("_id", "")).strip()
+            if doc_id and doc_id not in incoming_ids:
+                self.project_transponders_collection.delete_one({"_id": doc_id})
+
+        for index, row in enumerate(normalized):
+            name = str(row.get("name", "")).strip()
+            code = str(row.get("code", "")).strip()
+            doc_id = f"{name}|{code}"
+            payload = {
+                "_id": doc_id,
+                "Name": name,
+                "Code": code,
+                "RxCode": str(row.get("rx_code", "")),
+                "RxPort": str(row.get("rx_port", "")),
+                "RxFreq": str(row.get("rx_freq", "")),
+                "TxCode": str(row.get("tx_code", "")),
+                "TxPort": str(row.get("tx_port", "")),
+                "TxFreq": str(row.get("tx_freq", "")),
+                "sort_order": index,
+            }
+            self.project_transponders_collection.update_one(
+                {"_id": doc_id},
+                {"$set": payload},
+                upsert=True,
+            )
+
+        return len(normalized)
 
     def get_configuration_value(self, parameter: str, default: str = "") -> str:
         key = str(parameter or "").strip()

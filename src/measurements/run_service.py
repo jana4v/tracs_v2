@@ -114,7 +114,7 @@ class MeasureRunService:
         return selected
 
     def _collect_requested_parameters(self, selected_rows: list[MeasureSelectedRow]) -> list[str]:
-        order = ["power", "frequency", "modulation_index", "spurious"]
+        order = ["power", "frequency", "modulation_index", "spurious", "command_threshold", "ranging_threshold"]
         requested: list[str] = []
         for parameter in order:
             if parameter == "power" and any(bool(s.row.power_selected) for s in selected_rows):
@@ -124,6 +124,10 @@ class MeasureRunService:
             if parameter == "modulation_index" and any(bool(s.row.modulation_index_selected) for s in selected_rows):
                 requested.append(parameter)
             if parameter == "spurious" and any(bool(s.row.spurious_selected) for s in selected_rows):
+                requested.append(parameter)
+            if parameter == "command_threshold" and any(bool(getattr(s.row, "command_threshold_selected", False)) for s in selected_rows):
+                requested.append(parameter)
+            if parameter == "ranging_threshold" and any(bool(getattr(s.row, "ranging_threshold_selected", False)) for s in selected_rows):
                 requested.append(parameter)
         return requested
 

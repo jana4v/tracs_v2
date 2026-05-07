@@ -1,18 +1,25 @@
-from typing import List
+from typing import List, Any
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 
+from src.config import settings
 from src.database.connection import (
     get_transmitters_collection,
     get_instruments_collection,
     get_project_instruments_collection,
     get_project_power_meters_collection,
     get_project_tsm_paths_collection,
+    get_project_transponders_collection,
     get_configuration_collection,
     get_transmitter_misc_collection,
 )
 from src.database.sqlite_json_store import SQLiteJsonCollection
+from src.database.connection import Database
 from src.repositories.test_systems_repo import TestSystemsRepository
+from src.repositories.test_plan_types_repo import TestPlanTypesRepository
 from src.repositories.transmitter_repo import TransmitterRepository
+from src.repositories.downlink_cal_calibration_repo import DownlinkCalCalibrationRepository
+from src.repositories.mod_index_measurement_repo import ModIndexMeasurementRepository
 from src.schemas.enums import ModulationType
 from src.schemas.test_systems import (
     InstrumentCatalogResponse,
@@ -22,6 +29,9 @@ from src.schemas.test_systems import (
     ProjectPowerMetersResponse,
     ProjectPowerMetersSaveRequest,
     ProjectPowerMetersSaveResponse,
+    ProjectTranspondersResponse,
+    ProjectTranspondersSaveRequest,
+    ProjectTranspondersSaveResponse,
     TsmPathsResponse,
     TsmPathsSaveRequest,
     TsmPathsSaveResponse,
@@ -42,6 +52,9 @@ from src.schemas.transmitter import (
     SpuriousBandConfigResponse,
     SpuriousBandConfigSaveRequest,
     SpuriousBandConfigSaveResponse,
+    TestProfileSpuriousRowsResponse,
+    TestProfileSpuriousRowsUpdateRequest,
+    TestProfileSpuriousRowsUpdateResponse,
     TransmitterCreate,
     TransmitterResponse,
 )
@@ -63,6 +76,7 @@ def get_test_systems_repo(
     project_instruments_collection: SQLiteJsonCollection = Depends(get_project_instruments_collection),
     project_power_meters_collection: SQLiteJsonCollection = Depends(get_project_power_meters_collection),
     project_tsm_paths_collection: SQLiteJsonCollection = Depends(get_project_tsm_paths_collection),
+    project_transponders_collection: SQLiteJsonCollection = Depends(get_project_transponders_collection),
     configuration_collection: SQLiteJsonCollection = Depends(get_configuration_collection),
 ) -> TestSystemsRepository:
     return TestSystemsRepository(
@@ -71,14 +85,28 @@ def get_test_systems_repo(
         project_instruments_collection=project_instruments_collection,
         project_power_meters_collection=project_power_meters_collection,
         project_tsm_paths_collection=project_tsm_paths_collection,
+        project_transponders_collection=project_transponders_collection,
         configuration_collection=configuration_collection,
     )
+
+
+def get_test_plan_types_repo() -> TestPlanTypesRepository:
+    from src.database.connection import Database
+
+    return TestPlanTypesRepository(Database._db_path, settings.TEST_PLAN_TYPES_TABLE)
 
 
 @router.get("/modulation-types", response_model=List[str])
 def get_modulation_types():
     """Return the list of supported modulation types."""
     return [m.value for m in ModulationType]
+
+
+@router.get("/test-plan-types", response_model=List[str])
+def get_test_plan_types(
+    repo: TestPlanTypesRepository = Depends(get_test_plan_types_repo),
+):
+    return repo.list_types()
 
 
 @router.get("/transmitters", response_model=List[TransmitterResponse])
@@ -118,6 +146,28 @@ def update_parameter_rows(
     )
     return ParameterRowsUpdateResponse(
         parameter=parameter,
+        updated_transmitters=summary["updated_transmitters"],
+        updated_rows=summary["updated_rows"],
+    )
+
+
+@router.get("/transmitters/test-profile-spurious", response_model=TestProfileSpuriousRowsResponse)
+def get_test_profile_spurious_rows(
+    repo: TransmitterRepository = Depends(get_repo),
+):
+    rows = repo.get_test_profile_spurious_rows()
+    return TestProfileSpuriousRowsResponse(rows=rows)
+
+
+@router.put("/transmitters/test-profile-spurious", response_model=TestProfileSpuriousRowsUpdateResponse)
+def update_test_profile_spurious_rows(
+    payload: TestProfileSpuriousRowsUpdateRequest,
+    repo: TransmitterRepository = Depends(get_repo),
+):
+    summary = repo.update_test_profile_spurious_rows(
+        updates=[item.model_dump() for item in payload.rows],
+    )
+    return TestProfileSpuriousRowsUpdateResponse(
         updated_transmitters=summary["updated_transmitters"],
         updated_rows=summary["updated_rows"],
     )
@@ -178,6 +228,24 @@ def delete_transmitter(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Transmitter with code '{code}' not found.",
         )
+    # Cascade: drop any DownlinkCalCalibrationData rows tied to this code so
+    # they don't become orphans (the transmitter document is the source of
+    # truth for code/port/frequency).
+    try:
+        downlink_repo = DownlinkCalCalibrationRepository(
+            Database._db_path, settings.DOWNLINK_CAL_CALIBRATION_TABLE
+        )
+        downlink_repo.delete_for_code(code)
+    except Exception:
+        pass
+    # Cascade: drop ModIndexMeasurement rows for this transmitter.
+    try:
+        mod_index_repo = ModIndexMeasurementRepository(
+            Database._db_path, settings.MOD_INDEX_MEASUREMENT_TABLE
+        )
+        mod_index_repo.delete_for_code(code, system_kind="transmitter")
+    except Exception:
+        pass
     return {"message": f"Transmitter '{code}' deleted successfully."}
 
 
@@ -239,6 +307,23 @@ def save_project_tsm_paths(
     return TsmPathsSaveResponse(saved_rows=saved_rows)
 
 
+@router.get("/test-systems/project-transponders", response_model=ProjectTranspondersResponse)
+def get_project_transponders(
+    repo: TestSystemsRepository = Depends(get_test_systems_repo),
+):
+    rows = repo.get_project_transponder_rows()
+    return ProjectTranspondersResponse(rows=rows)
+
+
+@router.put("/test-systems/project-transponders", response_model=ProjectTranspondersSaveResponse)
+def save_project_transponders(
+    payload: ProjectTranspondersSaveRequest,
+    repo: TestSystemsRepository = Depends(get_test_systems_repo),
+):
+    saved_rows = repo.save_project_transponder_rows([r.model_dump() for r in payload.rows])
+    return ProjectTranspondersSaveResponse(saved_rows=saved_rows)
+
+
 @router.get("/test-systems/configuration/{parameter}", response_model=ConfigurationValueResponse)
 def get_configuration_value(
     parameter: str,
@@ -272,3 +357,179 @@ def save_spurious_band_configs(
     """Save standalone spurious search band configurations."""
     saved_rows = repo.save_spurious_band_configs([b.model_dump() for b in payload.bands])
     return SpuriousBandConfigSaveResponse(saved_rows=saved_rows)
+
+
+# ── Transponder Test Profiles ─────────────────────────────────────────────────
+
+class TransponderTestProfileRow(BaseModel):
+    profile_name: str = Field(default="")
+    levels: List[List[Any]] = Field(default_factory=lambda: [
+        [-60], [-70], [-80], [-90], [-100], [-105]
+    ])
+    mod_index_at_threshold: float = Field(default=0.62)
+    tones: List[str] = Field(default_factory=list)
+
+
+class TransponderTestProfileResponse(BaseModel):
+    profile_type: str
+    rows: List[TransponderTestProfileRow]
+
+
+class TransponderTestProfileSaveRequest(BaseModel):
+    profile_type: str
+    rows: List[TransponderTestProfileRow]
+
+
+class TransponderTestProfileSaveResponse(BaseModel):
+    profile_type: str
+    saved_rows: int
+
+
+def get_transponder_test_profiles_repo():
+    from src.database.connection import Database
+    from src.repositories.receiver_test_profiles_repo import ReceiverTestProfilesRepository
+    return ReceiverTestProfilesRepository(Database._db_path, settings.TRANSPONDER_TEST_PROFILES_TABLE)
+
+
+@router.get("/transponder-test-profiles/{profile_type}", response_model=TransponderTestProfileResponse)
+def get_transponder_test_profile(
+    profile_type: str,
+    repo=Depends(get_transponder_test_profiles_repo),
+):
+    from src.database.connection import Database
+    from src.database.system_catalog import SystemCatalogStore
+    plan_types_repo = TestPlanTypesRepository(Database._db_path, settings.TEST_PLAN_TYPES_TABLE)
+    plan_types = plan_types_repo.list_types()
+
+    catalog_store = SystemCatalogStore(Database._db_path)
+    all_tones: List[str] = [t["tone_khz"] for t in catalog_store.list_ranging_tones()]
+
+    saved = repo.get_profile(profile_type)
+    saved_by_name: dict = {r.get("profile_name", ""): r for r in saved if isinstance(r, dict)}
+
+    default_levels = [[-60], [-70], [-80], [-90], [-100], [-105]]
+
+    rows: list[TransponderTestProfileRow] = []
+    for plan_name in plan_types:
+        if plan_name in saved_by_name:
+            s = saved_by_name[plan_name]
+            saved_tones = s.get("tones", [])
+            rows.append(TransponderTestProfileRow(
+                profile_name=plan_name,
+                levels=s.get("levels", default_levels),
+                mod_index_at_threshold=float(s.get("mod_index_at_threshold", 0.62)),
+                tones=saved_tones if saved_tones else all_tones,
+            ))
+        else:
+            rows.append(TransponderTestProfileRow(
+                profile_name=plan_name,
+                levels=default_levels,
+                mod_index_at_threshold=0.62,
+                tones=all_tones,
+            ))
+
+    return TransponderTestProfileResponse(profile_type=profile_type, rows=rows)
+
+
+@router.put("/transponder-test-profiles", response_model=TransponderTestProfileSaveResponse)
+def save_transponder_test_profile(
+    payload: TransponderTestProfileSaveRequest,
+    repo=Depends(get_transponder_test_profiles_repo),
+):
+    rows_data = [row.model_dump() for row in payload.rows]
+    repo.save_profile(payload.profile_type, rows_data)
+    return TransponderTestProfileSaveResponse(
+        profile_type=payload.profile_type,
+        saved_rows=len(rows_data),
+    )
+
+
+# ── Test Plan Selections (per-system-kind, per-test-plan-type) ───────────────
+
+
+class TestPlanSelectionRow(BaseModel):
+    """A single saved checkbox row for a system within a test plan.
+
+    For transmitter / receiver kinds, identifying fields are code/port/frequency_label.
+    For transponder kind, identifying fields are transponder_code/uplink/downlink.
+    Either set may be provided; missing fields are stored as empty strings.
+    """
+    code: str = ""
+    port: str = ""
+    frequency_label: str = ""
+    transponder_code: str = ""
+    uplink: str = ""
+    downlink: str = ""
+    params: dict = Field(default_factory=dict)
+
+
+class TestPlanSelectionsResponse(BaseModel):
+    system_kind: str
+    test_plan_name: str
+    rows: List[TestPlanSelectionRow]
+
+
+class TestPlanSelectionsSaveRequest(BaseModel):
+    test_plan_name: str
+    rows: List[TestPlanSelectionRow]
+
+
+class TestPlanSelectionsSaveResponse(BaseModel):
+    system_kind: str
+    test_plan_name: str
+    saved_rows: int
+
+
+def get_test_plan_selections_repo():
+    from src.database.connection import Database
+    from src.repositories.test_plan_selections_repo import TestPlanSelectionsRepository
+    return TestPlanSelectionsRepository(Database._db_path, settings.TEST_PLAN_SELECTIONS_TABLE)
+
+
+def _validate_system_kind(system_kind: str) -> str:
+    kind = (system_kind or "").strip().lower()
+    if kind not in ("transmitter", "receiver", "transponder"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid system_kind '{system_kind}'. Must be one of: transmitter, receiver, transponder.",
+        )
+    return kind
+
+
+@router.get(
+    "/test-plan/selections/{system_kind}/{test_plan_name}",
+    response_model=TestPlanSelectionsResponse,
+)
+def get_test_plan_selections(
+    system_kind: str,
+    test_plan_name: str,
+    repo=Depends(get_test_plan_selections_repo),
+):
+    kind = _validate_system_kind(system_kind)
+    saved = repo.get_selections(kind, test_plan_name)
+    rows = [TestPlanSelectionRow(**(r if isinstance(r, dict) else {})) for r in saved]
+    return TestPlanSelectionsResponse(
+        system_kind=kind,
+        test_plan_name=test_plan_name,
+        rows=rows,
+    )
+
+
+@router.put(
+    "/test-plan/selections/{system_kind}",
+    response_model=TestPlanSelectionsSaveResponse,
+)
+def save_test_plan_selections(
+    system_kind: str,
+    payload: TestPlanSelectionsSaveRequest,
+    repo=Depends(get_test_plan_selections_repo),
+):
+    kind = _validate_system_kind(system_kind)
+    rows_data = [row.model_dump() for row in payload.rows]
+    repo.save_selections(kind, payload.test_plan_name, rows_data)
+    return TestPlanSelectionsSaveResponse(
+        system_kind=kind,
+        test_plan_name=payload.test_plan_name,
+        saved_rows=len(rows_data),
+    )
+

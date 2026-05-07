@@ -152,6 +152,31 @@ class ParameterRowsUpdateResponse(BaseModel):
     updated_rows: int
 
 
+class TestProfileSpuriousRowView(BaseModel):
+    transmitter_code: str
+    transmitter_name: str | None = None
+    modulation_type: ModulationType
+    row: TestProfileSpuriousSpecRow
+
+
+class TestProfileSpuriousRowsResponse(BaseModel):
+    rows: list[TestProfileSpuriousRowView]
+
+
+class TestProfileSpuriousRowUpdate(BaseModel):
+    transmitter_code: str
+    row: TestProfileSpuriousSpecRow
+
+
+class TestProfileSpuriousRowsUpdateRequest(BaseModel):
+    rows: list[TestProfileSpuriousRowUpdate]
+
+
+class TestProfileSpuriousRowsUpdateResponse(BaseModel):
+    updated_transmitters: int
+    updated_rows: int
+
+
 class OnBoardLossRowView(BaseModel):
     transmitter_code: str
     transmitter_name: str | None = None

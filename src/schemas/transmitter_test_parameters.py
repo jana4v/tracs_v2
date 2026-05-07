@@ -59,9 +59,8 @@ class TestProfileSpuriousSpecRow(BaseModel):
     port: str
     frequency_label: str
     frequency: str
-    profile_name: str = ""
-    enable: bool = True
-    spurious_search_bands: list[list[str | int | float]] = Field(default_factory=lambda: [["", ""]])
+    inband: bool = False
+    spurband: bool = False
 
 
 class OnBoardLossSpecRow(BaseModel):
@@ -80,6 +79,8 @@ class CalibrationSpecRow(BaseModel):
     system_loss: ScalarValue = None
     fixed_pad_loss: ScalarValue = None
     antenna_gain: ScalarValue = None
+    ground_antenna_gain: ScalarValue = None
+    distance: ScalarValue = None
     total_loss: ScalarValue = None
 
 

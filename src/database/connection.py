@@ -37,6 +37,10 @@ def get_project_tsm_paths_collection() -> SQLiteJsonCollection:
     return Database.get_collection(settings.PROJECT_TSM_PATHS_COLLECTION)
 
 
+def get_project_transponders_collection() -> SQLiteJsonCollection:
+    return Database.get_collection(settings.PROJECT_TRANSPONDERS_COLLECTION)
+
+
 def get_configuration_collection() -> SQLiteJsonCollection:
     return Database.get_collection(settings.CONFIGURATION_COLLECTION)
 

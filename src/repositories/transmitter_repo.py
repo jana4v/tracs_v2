@@ -6,11 +6,13 @@ from src.schemas.transmitter_test_parameters import (
     ModulationIndexSpecRow,
     PowerSpecRow,
     SpuriousSpecRow,
+    TestProfileSpuriousSpecRow,
 )
 from src.schemas.transmitter import TransmitterCreate, TransmitterResponse
 from src.schemas.enums import ModulationType, SystemType
 from src.database.system_catalog import get_catalog_store
 from src.repositories.system_catalog_repo import SystemCatalogRepository
+from src.utils.fspl import compute_fspl
 
 
 transmitter_response_adapter = TypeAdapter(TransmitterResponse)
@@ -143,6 +145,48 @@ class TransmitterRepository:
             if doc_id:
                 self.tsm_paths_collection.delete_one({"_id": doc_id})
 
+    # Derived arrays inside `modulation_details` that are keyed by
+    # (port, frequency_label, frequency). They MUST be pruned on every
+    # upsert so they cannot outlive the ports/frequencies that produced
+    # them — the system document is the source of truth.
+    _DERIVED_DETAIL_ARRAYS = (
+        "power_specs",
+        "frequency_specs",
+        "modulation_index_specs",
+        "spurious_specs",
+        "calibration_specs",
+        "on_board_loss_specs",
+        "test_profile_spurious_specs",
+    )
+
+    def _prune_derived_modulation_details(self, doc: dict[str, Any]) -> None:
+        """Drop derived rows whose port/frequency combo is no longer present.
+
+        Mutates `doc["modulation_details"]` in place. Existing rows for
+        surviving combos are kept untouched (so user-entered values are not
+        lost when unrelated edits are saved). New combos are NOT auto-filled
+        here — reads inject defaults via `_merge_with_defaults` / explicit
+        per-parameter row builders.
+        """
+        details = doc.get("modulation_details")
+        if not isinstance(details, dict):
+            return
+
+        valid_keys = {
+            f"{port}|{label}|{freq}"
+            for port, label, freq in self._extract_ports_frequencies(details)
+        }
+
+        for key_name in self._DERIVED_DETAIL_ARRAYS:
+            stored = details.get(key_name)
+            if not isinstance(stored, list):
+                continue
+            details[key_name] = [
+                item
+                for item in stored
+                if isinstance(item, dict) and self._build_key(item) in valid_keys
+            ]
+
     def get_all_for_system_type(self, system_type: SystemType) -> List[TransmitterResponse]:
         cursor = self.collection.find(
             {"system_type": system_type.value},
@@ -167,6 +211,12 @@ class TransmitterRepository:
         """Insert or update by code (upsert semantics)."""
         doc = transmitter.model_dump()
         doc["system_type"] = system_type.value
+        # Prune derived rows whose port/frequency combo no longer exists on
+        # the new modulation_details. The system document is the source of
+        # truth — stale derived entries (power/frequency/modulation_index/
+        # spurious/calibration/on_board_loss/test_profile_spurious specs)
+        # must not survive add/delete edits to ports or frequencies.
+        self._prune_derived_modulation_details(doc)
         self.collection.update_one(
             {"system_type": system_type.value, "code": transmitter.code},
             {"$set": doc},
@@ -335,12 +385,10 @@ class TransmitterRepository:
             stored = existing_map.get(key)
             merged_rows.append({**default, **(stored or {})})
 
-        # Keep any stored rows that don't match current port/frequency combinations
-        combo_keys = {self._build_key({"port": p, "frequency_label": l, "frequency": f}) for p, l, f in combos}
-        for key, row in existing_map.items():
-            if key not in combo_keys:
-                merged_rows.append(row)
-
+        # Drop any stored rows whose port/frequency combo no longer exists on
+        # the transmitter. The transmitter `modulation_details` is the source
+        # of truth for ports/frequencies; stale derived rows must not survive
+        # add/delete edits.
         return merged_rows
 
     def get_parameter_rows(self, parameter: str) -> list[dict[str, Any]]:
@@ -392,6 +440,122 @@ class TransmitterRepository:
                     )
 
         return rows
+
+    def _default_test_profile_spurious_row(
+        self,
+        tx_code: str,
+        port: str,
+        label: str,
+        freq: str,
+    ) -> dict[str, Any]:
+        return {
+            "code": tx_code,
+            "port": port,
+            "frequency_label": label,
+            "frequency": freq,
+            "inband": True,
+            "spurband": label.strip().upper() == "DF",
+        }
+
+    def get_test_profile_spurious_rows(self) -> list[dict[str, Any]]:
+        applicable = {ModulationType.PSK_PM.value}
+
+        cursor = self.collection.find(
+            {
+                "system_type": SystemType.Transmitter.value,
+                "modulation_type": {"$in": list(applicable)},
+            },
+            {
+                "_id": 0,
+                "code": 1,
+                "name": 1,
+                "modulation_type": 1,
+                "modulation_details": 1,
+            },
+        )
+
+        rows: list[dict[str, Any]] = []
+        for doc in cursor:
+            tx_code = doc.get("code")
+            tx_name = doc.get("name")
+            modulation_type = doc.get("modulation_type")
+            details = doc.get("modulation_details") or {}
+            combos = self._extract_ports_frequencies(details)
+
+            stored_rows = details.get("test_profile_spurious_specs", [])
+            stored_map: dict[str, dict[str, Any]] = {}
+            if isinstance(stored_rows, list):
+                for item in stored_rows:
+                    if isinstance(item, dict):
+                        stored_map[self._build_key(item)] = item
+
+            merged_rows: list[dict[str, Any]] = []
+            for port, label, freq in combos:
+                default = self._default_test_profile_spurious_row(str(tx_code or ""), port, label, freq)
+                key = self._build_key(default)
+                stored = stored_map.get(key)
+                merged_rows.append({**default, **(stored or {})})
+
+            # Stale combos no longer present on the transmitter are pruned
+            # (modulation_details is the source of truth).
+
+            for row in merged_rows:
+                validated_row = TestProfileSpuriousSpecRow(**row).model_dump()
+                rows.append(
+                    {
+                        "transmitter_code": tx_code,
+                        "transmitter_name": tx_name,
+                        "modulation_type": modulation_type,
+                        "row": validated_row,
+                    }
+                )
+
+        return rows
+
+    def update_test_profile_spurious_rows(self, updates: list[dict[str, Any]]) -> dict[str, int]:
+        applicable = {ModulationType.PSK_PM.value}
+
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for item in updates:
+            tx_code = item.get("transmitter_code")
+            row = item.get("row")
+            if not tx_code or not isinstance(row, dict):
+                continue
+            grouped.setdefault(tx_code, []).append(row)
+
+        updated_transmitters = 0
+        updated_rows = 0
+
+        for tx_code, rows in grouped.items():
+            doc = self.collection.find_one(
+                {
+                    "system_type": SystemType.Transmitter.value,
+                    "code": tx_code,
+                    "modulation_type": {"$in": list(applicable)},
+                },
+                {"_id": 1, "code": 1},
+            )
+            if not doc:
+                continue
+
+            normalized_rows: list[dict[str, Any]] = []
+            for row in rows:
+                row["code"] = tx_code
+                validated_row = TestProfileSpuriousSpecRow(**row).model_dump()
+                normalized_rows.append(validated_row)
+
+            self.collection.update_one(
+                {"_id": doc["_id"]},
+                {"$set": {"modulation_details.test_profile_spurious_specs": normalized_rows}},
+            )
+
+            updated_transmitters += 1
+            updated_rows += len(normalized_rows)
+
+        return {
+            "updated_transmitters": updated_transmitters,
+            "updated_rows": updated_rows,
+        }
 
     def update_parameter_rows(self, parameter: str, updates: list[dict[str, Any]]) -> dict[str, int]:
         config = PARAMETER_CONFIG.get(parameter)
@@ -623,6 +787,8 @@ class TransmitterRepository:
                 system_loss = loss_row.get("loss_db", "")
                 fixed_pad_loss = cal_row.get("fixed_pad_loss", 0)
                 antenna_gain = cal_row.get("antenna_gain", 0)
+                ground_antenna_gain = cal_row.get("ground_antenna_gain", 0)
+                distance = cal_row.get("distance", 0)
 
                 def _num(v: Any) -> float:
                     try:
@@ -630,7 +796,17 @@ class TransmitterRepository:
                     except Exception:
                         return 0.0
 
-                total_loss = _num(antenna_gain) - _num(system_loss) - _num(fixed_pad_loss)
+                # Match GUI:
+                #   total_loss = |antenna_gain| + |ground_antenna_gain|
+                #              - |fspl| - |system_loss| - |fixed_pad_loss|
+                fspl = compute_fspl(_num(distance), _num(power_row.get("frequency", 0)))
+                total_loss = (
+                    abs(_num(antenna_gain))
+                    + abs(_num(ground_antenna_gain))
+                    - abs(fspl)
+                    - abs(_num(system_loss))
+                    - abs(_num(fixed_pad_loss))
+                )
 
                 row = {
                     "code": str(power_row.get("code", tx_code or "")),
@@ -640,6 +816,9 @@ class TransmitterRepository:
                     "system_loss": system_loss,
                     "fixed_pad_loss": fixed_pad_loss,
                     "antenna_gain": antenna_gain,
+                    "ground_antenna_gain": ground_antenna_gain,
+                    "distance": distance,
+                    "fspl": fspl,
                     "total_loss": total_loss,
                 }
 
@@ -685,6 +864,8 @@ class TransmitterRepository:
                 system_loss = 0 if str(row.get("system_loss", "")).strip() == "" else row.get("system_loss", 0)
                 fixed_pad_loss = 0 if str(row.get("fixed_pad_loss", "")).strip() == "" else row.get("fixed_pad_loss", 0)
                 antenna_gain = 0 if str(row.get("antenna_gain", "")).strip() == "" else row.get("antenna_gain", 0)
+                ground_antenna_gain = 0 if str(row.get("ground_antenna_gain", "")).strip() == "" else row.get("ground_antenna_gain", 0)
+                distance = 0 if str(row.get("distance", "")).strip() == "" else row.get("distance", 0)
 
                 def _num(v: Any) -> float:
                     try:
@@ -692,7 +873,15 @@ class TransmitterRepository:
                     except Exception:
                         return 0.0
 
-                total_loss = _num(antenna_gain) - _num(system_loss) - _num(fixed_pad_loss)
+                # Match GUI: include FSPL and ground antenna gain in total_loss.
+                fspl = compute_fspl(_num(distance), _num(row.get("frequency", 0)))
+                total_loss = (
+                    abs(_num(antenna_gain))
+                    + abs(_num(ground_antenna_gain))
+                    - abs(fspl)
+                    - abs(_num(system_loss))
+                    - abs(_num(fixed_pad_loss))
+                )
 
                 normalized_rows.append(
                     {
@@ -703,6 +892,9 @@ class TransmitterRepository:
                         "system_loss": self._normalize_db_value(system_loss),
                         "fixed_pad_loss": self._normalize_db_value(fixed_pad_loss),
                         "antenna_gain": self._normalize_db_value(antenna_gain),
+                        "ground_antenna_gain": self._normalize_db_value(ground_antenna_gain),
+                        "distance": self._normalize_db_value(distance),
+                        "fspl": self._normalize_db_value(fspl),
                         "total_loss": self._normalize_db_value(total_loss),
                     }
                 )

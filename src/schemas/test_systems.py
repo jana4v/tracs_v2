@@ -65,6 +65,29 @@ class TsmPathsSaveResponse(BaseModel):
     saved_rows: int
 
 
+class ProjectTransponderRow(BaseModel):
+    name: str = Field(default="")
+    code: str = Field(default="")
+    rx_code: str = Field(default="")
+    rx_port: str = Field(default="")
+    rx_freq: str = Field(default="")
+    tx_code: str = Field(default="")
+    tx_port: str = Field(default="")
+    tx_freq: str = Field(default="")
+
+
+class ProjectTranspondersResponse(BaseModel):
+    rows: list[ProjectTransponderRow] = Field(default_factory=list)
+
+
+class ProjectTranspondersSaveRequest(BaseModel):
+    rows: list[ProjectTransponderRow] = Field(default_factory=list)
+
+
+class ProjectTranspondersSaveResponse(BaseModel):
+    saved_rows: int
+
+
 class ConfigurationValueResponse(BaseModel):
     parameter: str
     value: str

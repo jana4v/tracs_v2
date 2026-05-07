@@ -95,6 +95,7 @@ class SgCalibrationProcedure(CalibrationProcedure):
                     await asyncio.sleep(1.0)
                     measured_value = await power_meter.get_channel_power(power_meter_channel_number)
                     measured_value_rounded = round(float(measured_value), 1)
+                    measured_value_rounded = abs(measured_value_rounded)
 
                     now = datetime.now(timezone.utc)
                     deps.cal_sg_repo.upsert(runtime.cal_id, frequency, measured_value_rounded, now)

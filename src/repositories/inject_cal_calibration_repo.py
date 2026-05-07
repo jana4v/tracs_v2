@@ -94,8 +94,8 @@ class InjectCalCalibrationRepository:
                 (
                     str(cal_id or "").strip(),
                     float(frequency),
-                    float(sa_loss),
-                    float(dl_pm_loss),
+                    abs(float(sa_loss)),
+                    abs(float(dl_pm_loss)),
                     date_time.isoformat(),
                 ),
             )
@@ -118,10 +118,10 @@ class InjectCalCalibrationRepository:
             {
                 "cal_id": str(row["CalId"]),
                 "frequency": float(row["Frequency"]),
-                "sa_loss": float(row["SA_Loss"]),
-                "dl_pm_loss": float(row["DL_PM_Loss"]),
+                "sa_loss": abs(float(row["SA_Loss"])),
+                "dl_pm_loss": abs(float(row["DL_PM_Loss"])),
                 # Keep value for backward-compatible consumers expecting a single loss field.
-                "value": float(row["SA_Loss"]),
+                "value": abs(float(row["SA_Loss"])),
                 "datetime": str(row["DateTime"]),
             }
             for row in rows

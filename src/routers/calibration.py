@@ -14,6 +14,7 @@ from src.database.connection import (
     get_configuration_collection,
     get_project_instruments_collection,
     get_project_power_meters_collection,
+    get_project_transponders_collection,
     get_project_tsm_paths_collection,
     get_transmitter_misc_collection,
     get_transmitters_collection,
@@ -30,6 +31,7 @@ from src.repositories.calibration_data_repo import CalibrationDataRepository
 from src.repositories.env_data_repo import EnvDataRepository
 from src.repositories.test_systems_repo import TestSystemsRepository
 from src.repositories.test_phases_repo import TestPhasesRepository
+from src.repositories.test_plan_types_repo import TestPlanTypesRepository
 from src.repositories.transmitter_repo import TransmitterRepository
 from src.schemas.calibration_data import (
     CalSgCompletedFrequenciesResponse,
@@ -68,6 +70,7 @@ def get_calibration_dependencies(
     instruments_collection: SQLiteJsonCollection = Depends(get_instruments_collection),
     project_instruments_collection: SQLiteJsonCollection = Depends(get_project_instruments_collection),
     project_power_meters_collection: SQLiteJsonCollection = Depends(get_project_power_meters_collection),
+    project_transponders_collection: SQLiteJsonCollection = Depends(get_project_transponders_collection),
     configuration_collection: SQLiteJsonCollection = Depends(get_configuration_collection),
 ) -> CalibrationDependencies:
     _ = runs_collection
@@ -79,6 +82,7 @@ def get_calibration_dependencies(
             project_instruments_collection=project_instruments_collection,
             project_power_meters_collection=project_power_meters_collection,
             project_tsm_paths_collection=tsm_paths_collection,
+            project_transponders_collection=project_transponders_collection,
             configuration_collection=configuration_collection,
         ),
         cal_sg_repo=CalSgCalibrationRepository(Database._db_path, settings.CAL_SG_CALIBRATION_TABLE),
@@ -121,10 +125,12 @@ def get_measure_options(
     repo: CalibrationDataRepository = Depends(get_repo),
 ):
     test_phases_repo = TestPhasesRepository(Database._db_path, settings.TEST_PHASES_TABLE)
+    test_plan_types_repo = TestPlanTypesRepository(Database._db_path, settings.TEST_PLAN_TYPES_TABLE)
     downlink_repo = DownlinkCalCalibrationRepository(Database._db_path, settings.DOWNLINK_CAL_CALIBRATION_TABLE)
 
     test_phases_rows = test_phases_repo.list_rows()
     test_phases = [str(r.get("TEST_PHASE") or "").strip() for r in test_phases_rows if str(r.get("TEST_PHASE") or "").strip() != ""]
+    test_plan_types = test_plan_types_repo.list_types()
 
     downlink_ids = downlink_repo.list_cal_ids()
     uplink_ids = repo.get_cal_ids(cal_type="uplink")
@@ -140,10 +146,13 @@ def get_measure_options(
         cal_ids.append(normalized)
 
     default_cal_id = cal_ids[0] if len(cal_ids) > 0 else None
+    default_test_plan_type = test_plan_types[0] if len(test_plan_types) > 0 else None
     return MeasureOptionsResponse(
         test_phases=test_phases,
         cal_ids=cal_ids,
+        test_plan_types=test_plan_types,
         default_cal_id=default_cal_id,
+        default_test_plan_type=default_test_plan_type,
     )
 
 

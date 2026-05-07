@@ -18,6 +18,7 @@ from src.database.system_catalog import (
     PARAMETER_TYPE_FREQUENCY,
     PARAMETER_TYPE_MODULATION_INDEX,
     PARAMETER_TYPE_POWER,
+    PARAMETER_TYPE_RANGING_THRESHOLD,
     PARAMETER_TYPE_SPURIOUS,
     SYSTEM_KIND_RECEIVER,
     SYSTEM_KIND_TRANSPONDER,
@@ -293,6 +294,7 @@ class SystemCatalogRepository:
                     valid_keys.add(key)
                     existing = existing_by_key.get(key)
                     payload = {
+                        "max_input_power": -60,
                         "specification": None,
                         "tolerance": 0.5,
                         "fbt": None,
@@ -758,3 +760,184 @@ class SystemCatalogRepository:
 
         self._store.mark_migration(migration_name)
         return stats
+
+    # ---------- ranging tones ----------
+    def get_ranging_tones(self) -> list[dict[str, Any]]:
+        return self._store.list_ranging_tones()
+
+    # ---------- ranging threshold ----------
+    def sync_transponder_ranging_threshold_rows(self) -> None:
+        """Auto-populate ranging_threshold_rows for every transponder × tone combination."""
+        tones = self._store.list_ranging_tones()
+        if not tones:
+            return
+
+        transponders = self._transmitters.find(
+            {"system_type": "Transponder"},
+            {"_id": 0, "code": 1, "name": 1},
+        )
+        transponder_codes: list[str] = [
+            _norm_str(t.get("code"))
+            for t in transponders
+            if _norm_str(t.get("code"))
+        ]
+
+        # Also pull the project-transponder rows to get uplink/downlink info.
+        from src.database.connection import Database
+        project_tp_col = Database.get_collection("ProjectTransponders")
+        project_tp_rows: list[dict[str, Any]] = project_tp_col.find({}, {"_id": 0})
+        uplink_by_code: dict[str, str] = {}
+        downlink_by_code: dict[str, str] = {}
+        for row in project_tp_rows:
+            code = _norm_str(row.get("Code") or row.get("code"))
+            if not code:
+                continue
+            rx_code = _norm_str(row.get("RxCode") or row.get("rx_code"))
+            rx_port = _norm_str(row.get("RxPort") or row.get("rx_port"))
+            rx_freq = _norm_str(row.get("RxFreq") or row.get("rx_freq"))
+            tx_code = _norm_str(row.get("TxCode") or row.get("tx_code"))
+            tx_port = _norm_str(row.get("TxPort") or row.get("tx_port"))
+            tx_freq = _norm_str(row.get("TxFreq") or row.get("tx_freq"))
+            uplink_by_code[code] = "_".join(x for x in [rx_code, rx_port, rx_freq] if x)
+            downlink_by_code[code] = "_".join(x for x in [tx_code, tx_port, tx_freq] if x)
+            # Register transponder code even if not in system catalog
+            if code not in transponder_codes:
+                transponder_codes.append(code)
+
+        existing_rows = self._store.list_ranging_threshold_rows()
+        existing_map: dict[tuple[str, int], dict[str, Any]] = {
+            (_norm_str(r["transponder_code"]), int(r["tone_id"])): r
+            for r in existing_rows
+        }
+
+        valid_keys: set[tuple[str, int]] = set()
+        sort_index = 0
+        for code in transponder_codes:
+            uplink = uplink_by_code.get(code, "")
+            downlink = downlink_by_code.get(code, "")
+            for tone in tones:
+                tone_id = int(tone["id"])
+                key = (code, tone_id)
+                valid_keys.add(key)
+                existing = existing_map.get(key)
+                self._store.upsert_ranging_threshold_row(
+                    transponder_code=code,
+                    tone_id=tone_id,
+                    uplink=uplink if uplink else (existing["uplink"] if existing else ""),
+                    downlink=downlink if downlink else (existing["downlink"] if existing else ""),
+                    max_input_power=existing["max_input_power"] if existing is not None else -60,
+                    specification=existing["specification"] if existing is not None else None,
+                    tolerance=existing["tolerance"] if existing is not None else None,
+                    fbt=existing["fbt"] if existing is not None else None,
+                    fbt_hot=existing["fbt_hot"] if existing is not None else None,
+                    fbt_cold=existing["fbt_cold"] if existing is not None else None,
+                    sort_order=sort_index,
+                )
+                sort_index += 1
+
+        # Remove stale rows (transponder no longer exists)
+        for row in existing_rows:
+            key = (_norm_str(row["transponder_code"]), int(row["tone_id"]))
+            if key not in valid_keys:
+                self._store.delete_ranging_threshold_row(int(row["id"]))
+
+    def get_ranging_threshold_rows(self) -> list[dict[str, Any]]:
+        self.sync_transponder_ranging_threshold_rows()
+        return self._store.list_ranging_threshold_rows()
+
+    def upsert_ranging_threshold_row(
+        self,
+        transponder_code: str,
+        tone_id: int,
+        uplink: str,
+        downlink: str,
+        max_input_power: Optional[float],
+        specification: Optional[float],
+        tolerance: Optional[float],
+        fbt: Any,
+        fbt_hot: Any,
+        fbt_cold: Any,
+        sort_order: int = 0,
+    ) -> int:
+        return self._store.upsert_ranging_threshold_row(
+            transponder_code=transponder_code,
+            tone_id=tone_id,
+            uplink=uplink,
+            downlink=downlink,
+            max_input_power=max_input_power,
+            specification=specification,
+            tolerance=tolerance,
+            fbt=fbt,
+            fbt_hot=fbt_hot,
+            fbt_cold=fbt_cold,
+            sort_order=sort_order,
+        )
+
+    # ---------- onboard losses ----------
+    def sync_onboard_losses(self, source_type: str) -> None:
+        """
+        Sync onboard_losses rows from the transmitter/receiver catalog.
+
+        For each system of the given source_type, fetch its ports and frequencies
+        from system_ports / system_frequencies and upsert one row per port×frequency.
+        Stale rows (deleted systems / ports / frequencies) are removed.
+        """
+        kind = source_type  # 'transmitter' or 'receiver'
+        system_type_label = kind.title()  # 'Transmitter' or 'Receiver'
+
+        systems = self._transmitters.find(query={"system_type": system_type_label})
+        valid_keys: set[tuple[str, str, str]] = set()
+        sort_index = 0
+        for system in systems:
+            code = _norm_str(system.get("code"))
+            if not code:
+                continue
+            ports = self.get_system_ports(kind, code)
+            frequencies = self.get_system_frequencies(kind, code)
+            for port in ports:
+                port_name = _norm_str(port.get("port_name"))
+                for freq in frequencies:
+                    freq_label = _norm_str(freq.get("frequency_label"))
+                    frequency_hz = _norm_str(freq.get("frequency_hz"))
+                    key = (code, port_name, freq_label)
+                    valid_keys.add(key)
+                    self._store.upsert_onboard_loss(
+                        source_type=kind,
+                        code=code,
+                        port=port_name,
+                        frequency=frequency_hz,
+                        freq_label=freq_label,
+                        loss_db=None,  # preserve existing value handled by upsert
+                        sort_order=sort_index,
+                    )
+                    sort_index += 1
+
+        # Remove stale rows
+        existing = self._store.list_onboard_losses(kind)
+        for row in existing:
+            key = (
+                _norm_str(row.get("code")),
+                _norm_str(row.get("port")),
+                _norm_str(row.get("freq_label")),
+            )
+            if key not in valid_keys:
+                self._store.delete_onboard_loss(int(row["id"]))
+
+    def get_onboard_losses(self, source_type: str) -> list[dict[str, Any]]:
+        self.sync_onboard_losses(source_type)
+        return self._store.list_onboard_losses(source_type)
+
+    def save_onboard_losses(self, rows: list[dict[str, Any]]) -> int:
+        updated = 0
+        for row in rows:
+            row_id = row.get("id")
+            if row_id is None:
+                continue
+            loss_raw = row.get("loss_db")
+            try:
+                loss_db: Optional[float] = None if loss_raw in (None, "") else float(loss_raw)
+            except (TypeError, ValueError):
+                loss_db = None
+            self._store.update_onboard_loss_db(int(row_id), loss_db)
+            updated += 1
+        return updated

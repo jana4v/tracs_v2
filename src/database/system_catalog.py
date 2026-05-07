@@ -35,6 +35,7 @@ PARAMETER_TYPE_FREQUENCY = "frequency"
 PARAMETER_TYPE_MODULATION_INDEX = "modulation_index"
 PARAMETER_TYPE_SPURIOUS = "spurious"
 PARAMETER_TYPE_COMMAND_THRESHOLD = "command_threshold"
+PARAMETER_TYPE_RANGING_THRESHOLD = "ranging_threshold"
 
 ALL_PARAMETER_TYPES = (
     PARAMETER_TYPE_POWER,
@@ -42,6 +43,7 @@ ALL_PARAMETER_TYPES = (
     PARAMETER_TYPE_MODULATION_INDEX,
     PARAMETER_TYPE_SPURIOUS,
     PARAMETER_TYPE_COMMAND_THRESHOLD,
+    PARAMETER_TYPE_RANGING_THRESHOLD,
 )
 
 ALL_SYSTEM_KINDS = (
@@ -174,13 +176,51 @@ class SystemCatalogStore:
                 CREATE INDEX IF NOT EXISTS ix_system_profile_rows_lookup
                     ON system_profile_rows(system_kind, system_code);
 
+                CREATE TABLE IF NOT EXISTS ranging_tones (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tone_khz   TEXT    NOT NULL UNIQUE,
+                    sort_order INTEGER NOT NULL DEFAULT 0
+                );
+
+                CREATE TABLE IF NOT EXISTS ranging_threshold_rows (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    transponder_code TEXT    NOT NULL,
+                    tone_id          INTEGER NOT NULL,
+                    uplink           TEXT    NOT NULL DEFAULT '',
+                    downlink         TEXT    NOT NULL DEFAULT '',
+                    max_input_power  REAL    DEFAULT -60,
+                    specification    REAL,
+                    tolerance        REAL,
+                    fbt_json         TEXT    NOT NULL DEFAULT 'null',
+                    fbt_hot_json     TEXT    NOT NULL DEFAULT 'null',
+                    fbt_cold_json    TEXT    NOT NULL DEFAULT 'null',
+                    sort_order       INTEGER NOT NULL DEFAULT 0,
+                    UNIQUE(transponder_code, tone_id),
+                    FOREIGN KEY(tone_id) REFERENCES ranging_tones(id) ON DELETE CASCADE
+                );
+
                 CREATE TABLE IF NOT EXISTS catalog_migrations (
                     name        TEXT PRIMARY KEY,
                     executed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
+
+                CREATE TABLE IF NOT EXISTS onboard_losses (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_type TEXT    NOT NULL,
+                    code        TEXT    NOT NULL DEFAULT '',
+                    port        TEXT    NOT NULL DEFAULT '',
+                    frequency   TEXT    NOT NULL DEFAULT '',
+                    freq_label  TEXT    NOT NULL DEFAULT '',
+                    loss_db     REAL,
+                    sort_order  INTEGER NOT NULL DEFAULT 0,
+                    UNIQUE(source_type, code, port, freq_label)
+                );
+                CREATE INDEX IF NOT EXISTS ix_onboard_losses_source
+                    ON onboard_losses(source_type, code);
                 """
             )
             self._ensure_compat_columns()
+            self._seed_ranging_tones()
             self._conn.commit()
 
     def _ensure_compat_columns(self) -> None:
@@ -248,6 +288,18 @@ class SystemCatalogStore:
         )
         self._conn.execute("DROP TABLE system_profile_rows")
         self._conn.execute("ALTER TABLE system_profile_rows_v2 RENAME TO system_profile_rows")
+
+    def _seed_ranging_tones(self) -> None:
+        """Insert default ranging tones if not already present."""
+        defaults = [("22", 0), ("27.777", 1)]
+        for tone_khz, sort_order in defaults:
+            self._conn.execute(
+                """
+                INSERT OR IGNORE INTO ranging_tones (tone_khz, sort_order)
+                VALUES (?, ?)
+                """,
+                (tone_khz, sort_order),
+            )
 
     # ---------- low-level helpers ----------
     def conn(self) -> sqlite3.Connection:
@@ -936,6 +988,201 @@ class SystemCatalogStore:
         with self._lock:
             self._conn.execute(
                 "INSERT OR IGNORE INTO catalog_migrations(name) VALUES (?)", (name,)
+            )
+            self._conn.commit()
+
+
+    # ---------- ranging tones ----------
+    def list_ranging_tones(self) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT id, tone_khz, sort_order FROM ranging_tones ORDER BY sort_order ASC, tone_khz ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ---------- ranging threshold rows ----------
+    def list_ranging_threshold_rows(
+        self,
+        transponder_code: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        sql = """
+            SELECT r.id, r.transponder_code, r.tone_id, t.tone_khz,
+                   r.uplink, r.downlink,
+                   r.max_input_power, r.specification, r.tolerance,
+                   r.fbt_json, r.fbt_hot_json, r.fbt_cold_json, r.sort_order
+            FROM ranging_threshold_rows r
+            JOIN ranging_tones t ON t.id = r.tone_id
+        """
+        params: list[Any] = []
+        if transponder_code is not None:
+            sql += " WHERE r.transponder_code = ?"
+            params.append(transponder_code)
+        sql += " ORDER BY r.transponder_code, t.sort_order, r.sort_order"
+        rows = self._conn.execute(sql, params).fetchall()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            d = dict(r)
+            for field in ("fbt_json", "fbt_hot_json", "fbt_cold_json"):
+                key = field.replace("_json", "")
+                try:
+                    d[key] = json.loads(d.pop(field) or "null")
+                except Exception:
+                    d[key] = None
+            out.append(d)
+        return out
+
+    def upsert_ranging_threshold_row(
+        self,
+        transponder_code: str,
+        tone_id: int,
+        uplink: str,
+        downlink: str,
+        max_input_power: Optional[float],
+        specification: Optional[float],
+        tolerance: Optional[float],
+        fbt: Any,
+        fbt_hot: Any,
+        fbt_cold: Any,
+        sort_order: int = 0,
+    ) -> int:
+        fbt_json = json.dumps(fbt, ensure_ascii=True, default=str)
+        fbt_hot_json = json.dumps(fbt_hot, ensure_ascii=True, default=str)
+        fbt_cold_json = json.dumps(fbt_cold, ensure_ascii=True, default=str)
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT id FROM ranging_threshold_rows
+                WHERE transponder_code = ? AND tone_id = ?
+                """,
+                (transponder_code, tone_id),
+            ).fetchone()
+            if row is not None:
+                self._conn.execute(
+                    """
+                    UPDATE ranging_threshold_rows
+                    SET uplink = ?, downlink = ?, max_input_power = ?,
+                        specification = ?, tolerance = ?,
+                        fbt_json = ?, fbt_hot_json = ?, fbt_cold_json = ?,
+                        sort_order = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        uplink, downlink, max_input_power,
+                        specification, tolerance,
+                        fbt_json, fbt_hot_json, fbt_cold_json,
+                        sort_order, row["id"],
+                    ),
+                )
+                self._conn.commit()
+                return int(row["id"])
+            cur = self._conn.execute(
+                """
+                INSERT INTO ranging_threshold_rows
+                    (transponder_code, tone_id, uplink, downlink,
+                     max_input_power, specification, tolerance,
+                     fbt_json, fbt_hot_json, fbt_cold_json, sort_order)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    transponder_code, tone_id, uplink, downlink,
+                    max_input_power, specification, tolerance,
+                    fbt_json, fbt_hot_json, fbt_cold_json, sort_order,
+                ),
+            )
+            self._conn.commit()
+            return int(cur.lastrowid)
+
+    def delete_ranging_threshold_row(self, row_id: int) -> None:
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM ranging_threshold_rows WHERE id = ?", (row_id,)
+            )
+            self._conn.commit()
+
+    # ---------- onboard losses ----------
+    def list_onboard_losses(self, source_type: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            """
+            SELECT id, source_type, code, port, frequency, freq_label, loss_db, sort_order
+            FROM onboard_losses
+            WHERE source_type = ?
+            ORDER BY code, sort_order, port, freq_label
+            """,
+            (source_type,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def upsert_onboard_loss(
+        self,
+        source_type: str,
+        code: str,
+        port: str,
+        frequency: str,
+        freq_label: str,
+        loss_db: Optional[float] = None,
+        sort_order: int = 0,
+        preserve_existing_loss: bool = True,
+    ) -> int:
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT id FROM onboard_losses
+                WHERE source_type = ? AND code = ? AND port = ? AND freq_label = ?
+                """,
+                (source_type, code, port, freq_label),
+            ).fetchone()
+            if row is not None:
+                if preserve_existing_loss:
+                    # Only update frequency and sort_order; keep existing loss_db
+                    self._conn.execute(
+                        """
+                        UPDATE onboard_losses
+                        SET frequency = ?, sort_order = ?
+                        WHERE id = ?
+                        """,
+                        (frequency, sort_order, row["id"]),
+                    )
+                else:
+                    self._conn.execute(
+                        """
+                        UPDATE onboard_losses
+                        SET frequency = ?, loss_db = ?, sort_order = ?
+                        WHERE id = ?
+                        """,
+                        (frequency, loss_db, sort_order, row["id"]),
+                    )
+                self._conn.commit()
+                return int(row["id"])
+            cur = self._conn.execute(
+                """
+                INSERT INTO onboard_losses
+                    (source_type, code, port, frequency, freq_label, loss_db, sort_order)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (source_type, code, port, frequency, freq_label, loss_db, sort_order),
+            )
+            self._conn.commit()
+            return int(cur.lastrowid)
+
+    def update_onboard_loss_db(self, row_id: int, loss_db: Optional[float]) -> None:
+        with self._lock:
+            self._conn.execute(
+                "UPDATE onboard_losses SET loss_db = ? WHERE id = ?",
+                (loss_db, row_id),
+            )
+            self._conn.commit()
+
+    def delete_onboard_loss(self, row_id: int) -> None:
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM onboard_losses WHERE id = ?", (row_id,)
+            )
+            self._conn.commit()
+
+    def delete_onboard_losses_for_code(self, source_type: str, code: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM onboard_losses WHERE source_type = ? AND code = ?",
+                (source_type, code),
             )
             self._conn.commit()
 

@@ -126,7 +126,9 @@ class CalibrationReportGenerateResponse(BaseModel):
 class MeasureOptionsResponse(BaseModel):
     test_phases: List[str]
     cal_ids: List[str]
+    test_plan_types: List[str] = []
     default_cal_id: str | None = None
+    default_test_plan_type: str | None = None
 
 
 class MeasureTableRow(BaseModel):
@@ -138,6 +140,8 @@ class MeasureTableRow(BaseModel):
     frequency_selected: bool = False
     modulation_index_selected: bool = False
     spurious_selected: bool = False
+    command_threshold_selected: bool = False
+    ranging_threshold_selected: bool = False
 
 
 class MeasureRunStartRequest(BaseModel):
@@ -172,6 +176,16 @@ class MeasureRunResultRow(BaseModel):
     measured_value: float
     applied_loss: float
     final_value: float
+    # Power-measurement breakdown (optional; zero when not applicable)
+    raw_value: float = 0.0
+    system_loss: float = 0.0
+    fixed_pad_loss: float = 0.0
+    antenna_gain: float = 0.0
+    ground_antenna_gain: float = 0.0
+    distance: float = 0.0
+    fspl: float = 0.0
+    total_loss_calibration: float = 0.0
+    on_board_loss: float = 0.0
     status: str
     message: str
     timestamp: datetime

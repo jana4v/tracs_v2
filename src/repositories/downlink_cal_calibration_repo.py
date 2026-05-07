@@ -71,7 +71,7 @@ class DownlinkCalCalibrationRepository:
                     str(port or "").strip(),
                     float(frequency),
                     str(frequency_label or "").strip(),
-                    float(value),
+                    abs(float(value)),
                     date_time.isoformat(),
                 ),
             )
@@ -99,7 +99,7 @@ class DownlinkCalCalibrationRepository:
                 "port": str(row["Port"]),
                 "frequency": float(row["Frequency"]),
                 "frequency_label": str(row["FrequencyLabel"]),
-                "value": float(row["Value"]),
+                "value": abs(float(row["Value"])),
                 "datetime": str(row["DateTime"]),
             }
             for row in rows
@@ -117,6 +117,21 @@ class DownlinkCalCalibrationRepository:
             {"code": str(r["Code"]), "port": str(r["Port"]), "frequency": float(r["Frequency"])}
             for r in rows
         ]
+
+    def delete_for_code(self, code: str) -> int:
+        """Delete every calibration row tied to the given transmitter code.
+
+        Used to cascade transmitter deletions so DownlinkCalCalibrationData
+        rows do not become orphans (the transmitter document is the source
+        of truth for code/port/frequency).
+        """
+        with self._lock:
+            cursor = self._conn.execute(
+                f"DELETE FROM {self._table_name} WHERE Code = ?",
+                (str(code or "").strip(),),
+            )
+            self._conn.commit()
+            return cursor.rowcount or 0
 
     def list_cal_ids(self) -> list[str]:
         """Return distinct CalId values ordered by latest DateTime descending."""

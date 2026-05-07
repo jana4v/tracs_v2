@@ -256,6 +256,7 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
                     await spectrum_analyzer.set_markers_off()
                     await inject_signal_generator.set_rf_off()
                     measured_value = round(measured_sa_peak - uncertainty-cal_sg_level, 1) 
+                    measured_value = abs(measured_value)
                     completed += 1
                     progress = 10.0 + ((completed / total_measurements) * 88.0)
                     now = datetime.now(timezone.utc)
@@ -531,18 +532,11 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
         if not include_spurious_bands:
             return [(f, freq_labels[f]) for f in sorted(freq_labels)]
 
-        spurious_row = self._get_spurious_row_for_channel(channel, deps)
+        spurious_row = self._get_test_profile_spurious_row_for_channel(channel, deps)
 
         if spurious_row:
-            for field_name in ("fbt", "fbt_hot", "fbt_cold"):
-                for offset in self._extract_offsets(spurious_row.get(field_name)):
-                    f = round(base_frequency + offset, 6)
-                    if f not in freq_labels:
-                        freq_labels[f] = "spur_band"
-
-            profile_name = str(spurious_row.get("profile_name") or "").strip()
-            if profile_name:
-                for start_frequency, stop_frequency in self._get_band_ranges(profile_name, deps):
+            if bool(spurious_row.get("spurband", False)):
+                for start_frequency, stop_frequency in self._get_band_ranges("Detailed", deps):
                     for frequency in self._expand_range(start_frequency, stop_frequency, 100.0):
                         f = round(frequency, 6)
                         if f not in freq_labels:
@@ -550,7 +544,7 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
 
         return [(f, freq_labels[f]) for f in sorted(freq_labels)]
 
-    def _get_spurious_row_for_channel(self, channel, deps: CalibrationDependencies) -> dict[str, Any] | None:
+    def _get_test_profile_spurious_row_for_channel(self, channel, deps: CalibrationDependencies) -> dict[str, Any] | None:
         channel_code = str(channel.code or "").strip()
         channel_port = str(channel.port or "").strip()
         channel_label = str(channel.frequency_label or "").strip()
@@ -566,7 +560,7 @@ class DownlinkCalibrationProcedure(CalibrationProcedure):
 
         for tx in candidates:
             details = getattr(tx, "modulation_details", None)
-            rows = getattr(details, "spurious_specs", []) or []
+            rows = getattr(details, "test_profile_spurious_specs", []) or []
             for row in rows:
                 row_label = str(getattr(row, "frequency_label", "")).strip()
                 row_frequency = str(getattr(row, "frequency", "")).strip()

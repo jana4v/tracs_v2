@@ -101,6 +101,8 @@ class InjectCalProcedure(CalibrationProcedure):
                 dl_pm_value = await dl_power_meter.get_channel_power(dl_channel_number)
                 sa_value_rounded = round(float(sa_value), 1)
                 dl_pm_value_rounded = round(float(dl_pm_value), 1)
+                sa_value_rounded = abs(sa_value_rounded)
+                dl_pm_value_rounded = abs(dl_pm_value_rounded)
 
                 now = datetime.now(timezone.utc)
                 deps.inject_cal_repo.upsert(runtime.cal_id, frequency, sa_value_rounded, dl_pm_value_rounded, now)

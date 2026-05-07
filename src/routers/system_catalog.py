@@ -622,3 +622,92 @@ def run_migration(
 ) -> dict[str, int]:
     """Populate the catalog and row tables from legacy transmitter JSON."""
     return repo.migrate_from_legacy_transmitters(force=force)
+
+
+# ---------- ranging tones ----------
+@router.get("/ranging-tones")
+def list_ranging_tones(
+    repo: SystemCatalogRepository = Depends(get_catalog_repo),
+) -> list[dict]:
+    return repo.get_ranging_tones()
+
+
+# ---------- ranging threshold rows ----------
+class RangingThresholdRowSave(BaseModel):
+    id: Optional[int] = None
+    transponder_code: str
+    tone_id: int
+    uplink: str = ""
+    downlink: str = ""
+    max_input_power: Optional[float] = -60
+    specification: Optional[float] = None
+    tolerance: Optional[float] = None
+    fbt: Any = None
+    fbt_hot: Any = None
+    fbt_cold: Any = None
+    sort_order: int = 0
+
+
+class RangingThresholdRowsBulkSave(BaseModel):
+    rows: list[RangingThresholdRowSave] = Field(default_factory=list)
+
+
+@router.get("/ranging-threshold-rows")
+def list_ranging_threshold_rows(
+    repo: SystemCatalogRepository = Depends(get_catalog_repo),
+) -> list[dict]:
+    return repo.get_ranging_threshold_rows()
+
+
+@router.put("/ranging-threshold-rows")
+def save_ranging_threshold_rows(
+    body: RangingThresholdRowsBulkSave,
+    repo: SystemCatalogRepository = Depends(get_catalog_repo),
+) -> dict[str, int]:
+    for index, row in enumerate(body.rows):
+        repo.upsert_ranging_threshold_row(
+            transponder_code=row.transponder_code,
+            tone_id=row.tone_id,
+            uplink=row.uplink,
+            downlink=row.downlink,
+            max_input_power=row.max_input_power,
+            specification=row.specification,
+            tolerance=row.tolerance,
+            fbt=row.fbt,
+            fbt_hot=row.fbt_hot,
+            fbt_cold=row.fbt_cold,
+            sort_order=index,
+        )
+    return {"saved_rows": len(body.rows)}
+
+
+# ---------- onboard losses ----------
+class OnboardLossSave(BaseModel):
+    id: Optional[int] = None
+    source_type: str
+    code: str = ""
+    port: str = ""
+    frequency: str = ""
+    freq_label: str = ""
+    loss_db: Optional[float] = None
+
+
+class OnboardLossBulkSave(BaseModel):
+    rows: list[OnboardLossSave] = Field(default_factory=list)
+
+
+@router.get("/onboard-losses")
+def list_onboard_losses(
+    source_type: str = Query(..., description="'transmitter' or 'receiver'"),
+    repo: SystemCatalogRepository = Depends(get_catalog_repo),
+) -> list[dict]:
+    return repo.get_onboard_losses(source_type)
+
+
+@router.put("/onboard-losses")
+def save_onboard_losses(
+    body: OnboardLossBulkSave,
+    repo: SystemCatalogRepository = Depends(get_catalog_repo),
+) -> dict[str, int]:
+    updated = repo.save_onboard_losses([r.model_dump() for r in body.rows])
+    return {"updated_rows": updated}

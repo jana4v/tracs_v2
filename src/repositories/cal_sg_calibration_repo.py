@@ -84,7 +84,7 @@ class CalSgCalibrationRepository:
                     Value = excluded.Value,
                     DateTime = excluded.DateTime
                 """,
-                (str(cal_id or "").strip(), float(frequency), float(value), date_time.isoformat()),
+                (str(cal_id or "").strip(), float(frequency), abs(float(value)), date_time.isoformat()),
             )
             self._conn.commit()
 
@@ -105,7 +105,7 @@ class CalSgCalibrationRepository:
             {
                 "cal_id": str(row["CalId"]),
                 "frequency": float(row["Frequency"]),
-                "value": float(row["Value"]),
+                "value": abs(float(row["Value"])),
                 "datetime": str(row["DateTime"]),
             }
             for row in rows

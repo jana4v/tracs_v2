@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     PROJECT_INSTRUMENTS_COLLECTION: str = "ProjectInstruments"
     PROJECT_POWER_METERS_COLLECTION: str = "ProjectPowerMeters"
     PROJECT_TSM_PATHS_COLLECTION: str = "ProjectTSMPaths"
+    PROJECT_TRANSPONDERS_COLLECTION: str = "ProjectTransponders"
     CONFIGURATION_COLLECTION: str = "Configuration"
     TRANSMITTER_MISC_COLLECTION: str = "TransmitterMisc"
     CALIBRATION_DATA_COLLECTION: str = "CalibrationData"
@@ -16,6 +17,11 @@ class Settings(BaseSettings):
     INJECT_CAL_CALIBRATION_TABLE: str = "InjectCalCalibrationData"
     DOWNLINK_CAL_CALIBRATION_TABLE: str = "DownlinkCalCalibrationData"
     TEST_PHASES_TABLE: str = "TestPhases"
+    TEST_PLAN_TYPES_TABLE: str = "TestPlanType"
+    RECEIVER_TEST_PROFILES_TABLE: str = "ReceiverTestProfiles"
+    TRANSPONDER_TEST_PROFILES_TABLE: str = "TransponderTestProfiles"
+    TEST_PLAN_SELECTIONS_TABLE: str = "TestPlanSelections"
+    MOD_INDEX_MEASUREMENT_TABLE: str = "ModIndexMeasurement"
 
     class Config:
         env_file = ".env"

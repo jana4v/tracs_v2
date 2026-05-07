@@ -27,9 +27,14 @@ async def lifespan(app: FastAPI):
     from src.repositories.cal_sg_calibration_repo import CalSgCalibrationRepository
     from src.repositories.inject_cal_calibration_repo import InjectCalCalibrationRepository
     from src.repositories.test_phases_repo import TestPhasesRepository
+    from src.repositories.test_plan_types_repo import TestPlanTypesRepository
+    from src.repositories.receiver_test_profiles_repo import ReceiverTestProfilesRepository
     CalSgCalibrationRepository(Database._db_path, settings.CAL_SG_CALIBRATION_TABLE)
     InjectCalCalibrationRepository(Database._db_path, settings.INJECT_CAL_CALIBRATION_TABLE)
     TestPhasesRepository(Database._db_path, settings.TEST_PHASES_TABLE)
+    TestPlanTypesRepository(Database._db_path, settings.TEST_PLAN_TYPES_TABLE)
+    ReceiverTestProfilesRepository(Database._db_path, settings.RECEIVER_TEST_PROFILES_TABLE)
+    ReceiverTestProfilesRepository(Database._db_path, settings.TRANSPONDER_TEST_PROFILES_TABLE)
     Database.get_collection(settings.CONFIGURATION_COLLECTION)
 
     # Initialize the additive system catalog schema and run a one-shot migration

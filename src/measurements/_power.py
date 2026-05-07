@@ -2,14 +2,23 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+from typing import Any
 
 from src.calibration._downlink import DownlinkCalibrationProcedure
 from src.calibration.base import CalibrationDependencies
 from src.schemas.calibration_data import MeasureMissingChannel
 from src.schemas.calibration_data import MeasureRunResultRow, MeasureRunStartRequest
 from src.services.switch_driver_paths import apply_switch_driver_paths
+from src.utils.fspl import compute_fspl
 
 from .base import MeasureProcedure, MeasureSelectedRow
+
+
+def _to_float(value: Any) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return 0.0
 
 
 class PowerMeasureProcedure(MeasureProcedure):
@@ -43,7 +52,6 @@ class PowerMeasureProcedure(MeasureProcedure):
 
         downlink_rows = deps.downlink_cal_repo.list_rows(cal_id)
         cable_loss_exact: dict[tuple[str, str, str], float] = {}
-        cable_loss_by_code_port: dict[tuple[str, str], list[tuple[float, float]]] = {}
         for row in downlink_rows:
             code = str(row.get("code") or "").strip()
             port = str(row.get("port") or "").strip()
@@ -51,7 +59,51 @@ class PowerMeasureProcedure(MeasureProcedure):
             value = float(row.get("value") or 0.0)
             key = (code, port, self._downlink._frequency_key(freq))
             cable_loss_exact[key] = value
-            cable_loss_by_code_port.setdefault((code, port), []).append((freq, value))
+
+        # Build a per-channel loss map from the Calibration / Transmitter table
+        # (modulation_details.calibration_specs) and the On Board Losses /
+        # Transmitter table (modulation_details.on_board_loss_specs).
+        calibration_loss_map: dict[tuple[str, str, str], dict[str, float]] = {}
+        try:
+            calibration_entries = deps.transmitter_repo.get_calibration_rows()
+        except Exception:
+            calibration_entries = []
+        for entry in calibration_entries:
+            row = entry.get("row") if isinstance(entry, dict) else None
+            if not isinstance(row, dict):
+                continue
+            cal_code = str(row.get("code") or "").strip()
+            cal_port = str(row.get("port") or "").strip()
+            try:
+                cal_freq = float(str(row.get("frequency") or "").strip())
+            except Exception:
+                continue
+            calibration_loss_map[(cal_code, cal_port, self._downlink._frequency_key(cal_freq))] = {
+                "system_loss": _to_float(row.get("system_loss")),
+                "fixed_pad_loss": _to_float(row.get("fixed_pad_loss")),
+                "antenna_gain": _to_float(row.get("antenna_gain")),
+                "ground_antenna_gain": _to_float(row.get("ground_antenna_gain")),
+                "distance": _to_float(row.get("distance")),
+            }
+
+        on_board_loss_map: dict[tuple[str, str, str], float] = {}
+        try:
+            on_board_entries = deps.transmitter_repo.get_on_board_loss_rows()
+        except Exception:
+            on_board_entries = []
+        for entry in on_board_entries:
+            row = entry.get("row") if isinstance(entry, dict) else None
+            if not isinstance(row, dict):
+                continue
+            ob_code = str(row.get("code") or "").strip()
+            ob_port = str(row.get("port") or "").strip()
+            try:
+                ob_freq = float(str(row.get("frequency") or "").strip())
+            except Exception:
+                continue
+            on_board_loss_map[(ob_code, ob_port, self._downlink._frequency_key(ob_freq))] = (
+                _to_float(row.get("loss_db"))
+            )
 
         instruments = deps.test_systems_repo.get_project_instruments_rows()
         inject_sg_config = self._downlink._get_instrument_config(instruments, "InjectSignalGenerator")
@@ -173,8 +225,8 @@ class PowerMeasureProcedure(MeasureProcedure):
                 inject_frequency = frequency + 1.0
                 inject_sa_loss = float(inject_loss["sa_loss"])
                 inject_pm_loss = float(inject_loss["dl_pm_loss"])
-                desired_power_meter_level = channel_power_1mhz - (inject_sa_loss - inject_pm_loss)
-                current_inject_sg_level = desired_power_meter_level - inject_pm_loss
+                desired_power_meter_level = channel_power_1mhz + (inject_sa_loss - inject_pm_loss)
+                current_inject_sg_level = desired_power_meter_level + inject_pm_loss
 
                 await inject_signal_generator.set_frequency(inject_frequency)
                 await inject_signal_generator.set_power_level(current_inject_sg_level)
@@ -182,19 +234,10 @@ class PowerMeasureProcedure(MeasureProcedure):
 
                 await downlink_power_meter.set_channel_frequency(inject_frequency, dl_pm_channel_number)
                 measured_pm = float(await downlink_power_meter.get_channel_power(dl_pm_channel_number))
-                for _ in range(10):
-                    delta = desired_power_meter_level - measured_pm
-                    if abs(delta) <= 0.1:
-                        break
-                    current_inject_sg_level += delta
-                    await inject_signal_generator.set_power_level(current_inject_sg_level)
-                    await asyncio.sleep(1)
-                    measured_pm = float(await downlink_power_meter.get_channel_power(dl_pm_channel_number))
-
+   
                 # Read injected-carrier peak directly and compute uncertainty
                 # against the expected injected level derived from channel power.
-                #await spectrum_analyzer.set_center_frequency(inject_frequency)
-                #await asyncio.sleep(0.5 + (2 * sweep_time))
+
                 await spectrum_analyzer.set_peak_search(1)
                 await asyncio.sleep(sweep_time)
                 expected_inject_freq_hz = inject_frequency * 1_000_000.0
@@ -210,19 +253,41 @@ class PowerMeasureProcedure(MeasureProcedure):
                     await asyncio.sleep(max(0.1, sweep_time))
                     marker_freq_hz = float(await spectrum_analyzer.get_marker_value_x_data(1))
                 measured_inject_peak = float(await spectrum_analyzer.get_marker_value_y_data(1))
-                uncertainty = channel_power_1mhz - measured_inject_peak
+                uncertainty = channel_power_1mhz - (measured_inject_peak + (desired_power_meter_level-measured_pm))
                 await spectrum_analyzer.set_markers_off()
                 await inject_signal_generator.set_rf_off()
 
                 
                 corrected_measured_value = round(channel_power_1mhz + uncertainty, 1)
-                applied_loss = self._resolve_downlink_cable_loss(
-                    cable_loss_exact,
-                    cable_loss_by_code_port,
-                    code,
-                    port,
-                    frequency,
+
+                cal_key = (code, port, self._downlink._frequency_key(frequency))
+                cal_components = calibration_loss_map.get(cal_key, {})
+                # The GUI Calibration / Transmitter panel sources `system_loss`
+                # from DownlinkCalCalibrationData for the selected Cal ID
+                # (calibrationDataApi.getDownlinkCalData) and overlays it on
+                # the persisted calibration row. Mirror that exactly here:
+                # always prefer the downlink-cal value for the active cal_id,
+                # and fall back to the persisted `calibration_specs.system_loss`
+                # only if no downlink-cal entry exists.
+                downlink_loss = cable_loss_exact.get(cal_key)
+                if downlink_loss is not None:
+                    system_loss = _to_float(downlink_loss)
+                else:
+                    system_loss = _to_float(cal_components.get("system_loss", 0.0))
+                fixed_pad_loss = _to_float(cal_components.get("fixed_pad_loss", 0.0))
+                antenna_gain = _to_float(cal_components.get("antenna_gain", 0.0))
+                ground_antenna_gain = _to_float(cal_components.get("ground_antenna_gain", 0.0))
+                distance = _to_float(cal_components.get("distance", 0.0))
+                fspl = compute_fspl(distance, frequency)
+                total_loss_calibration = (
+                    abs(antenna_gain)
+                    + abs(ground_antenna_gain)
+                    - abs(fspl)
+                    - abs(system_loss)
+                    - abs(fixed_pad_loss)
                 )
+                on_board_loss = _to_float(on_board_loss_map.get(cal_key, 0.0))
+                applied_loss = round(total_loss_calibration + on_board_loss, 2)
                 final_value = round(corrected_measured_value - applied_loss, 1)
 
                 results.append(
@@ -236,11 +301,21 @@ class PowerMeasureProcedure(MeasureProcedure):
                         measured_value=corrected_measured_value,
                         applied_loss=applied_loss,
                         final_value=final_value,
+                        raw_value=round(channel_power_1mhz, 1),
+                        system_loss=round(abs(system_loss), 2),
+                        fixed_pad_loss=round(abs(fixed_pad_loss), 2),
+                        antenna_gain=round(antenna_gain, 2),
+                        ground_antenna_gain=round(ground_antenna_gain, 2),
+                        distance=round(distance, 3),
+                        fspl=round(abs(fspl), 2),
+                        total_loss_calibration=round(total_loss_calibration, 2),
+                        on_board_loss=round(on_board_loss, 2),
                         status="completed",
                         message=(
-                            f"Power measured (1MHz channel power). raw={corrected_measured_value:.1f} dBm, "
+                            f"Power measured (1MHz channel power). raw={channel_power_1mhz:.1f} dBm, "
                             f"corrected={corrected_measured_value:.1f} dBm, "
-                            f"loss={applied_loss:.1f} dB, final={final_value:.1f} dBm, "
+                            f"cal_loss={total_loss_calibration:.2f} dB, on_board_loss={on_board_loss:.2f} dB, "
+                            f"applied_loss={applied_loss:.2f} dB, final={final_value:.1f} dBm, "
                             f"inject uncertainty={uncertainty:.2f} dB"
                         ),
                         timestamp=datetime.now(timezone.utc),
@@ -260,61 +335,8 @@ class PowerMeasureProcedure(MeasureProcedure):
         deps: CalibrationDependencies,
         selected_rows: list[MeasureSelectedRow],
     ) -> list[MeasureMissingChannel]:
-        cal_id = str(payload.cal_id or "").strip()
-        if cal_id == "":
-            return []
-
-        power_rows = [item for item in selected_rows if bool(item.row.power_selected)]
-        if len(power_rows) == 0:
-            return []
-
-        downlink_rows = deps.downlink_cal_repo.list_rows(cal_id)
-        downlink_keys: set[tuple[str, str, str]] = set()
-        for db_row in downlink_rows:
-            db_code = str(db_row.get("code") or "").strip()
-            db_port = str(db_row.get("port") or "").strip()
-            db_freq = self._downlink._frequency_key(float(db_row.get("frequency") or 0.0))
-            downlink_keys.add((db_code, db_port, db_freq))
-
-        missing: list[MeasureMissingChannel] = []
-        for selected in power_rows:
-            row = selected.row
-            code = str(row.code or "").strip()
-            port = str(row.port or "").strip()
-            freq_label = str(row.frequency_label or "").strip()
-            try:
-                frequency = float(str(row.frequency or "").strip())
-            except Exception:
-                continue
-            freq_key = self._downlink._frequency_key(frequency)
-            if (code, port, freq_key) in downlink_keys:
-                continue
-            missing.append(
-                MeasureMissingChannel(
-                    system_kind=selected.system_kind,  # type: ignore[arg-type]
-                    code=code,
-                    port=port,
-                    frequency_label=freq_label,
-                    frequency=frequency,
-                    parameter="power",
-                )
-            )
-
-        return missing
-
-    def _resolve_downlink_cable_loss(
-        self,
-        exact: dict[tuple[str, str, str], float],
-        by_code_port: dict[tuple[str, str], list[tuple[float, float]]],
-        code: str,
-        port: str,
-        frequency: float,
-    ) -> float:
-        key = (code, port, self._downlink._frequency_key(frequency))
-        if key in exact:
-            return float(exact[key])
-        _ = by_code_port
-        raise ValueError(
-            "Downlink cable loss not found in DownlinkCalCalibrationData "
-            f"for code/port/frequency: {code or '[blank]'}/{port or '[blank]'}/{frequency}"
-        )
+        # Power applied loss is now sourced from the per-transmitter
+        # Calibration / Transmitter table plus On Board Losses, so the
+        # legacy DownlinkCalCalibrationData gating is no longer required.
+        _ = (payload, deps, selected_rows)
+        return []
